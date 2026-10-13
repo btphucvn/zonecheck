@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZoneCheck Demo</title>
+<meta name="description" content="Free UK area reports: prices, crime, schools, flood risk and more for every postcode. Demo build.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@600;800&family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F7F9F6;      /* map paper, cool */
+  --surface:#FFFFFF;
+  --ink:#13233A;        /* survey navy */
+  --ink-2:#4A5A70;
+  --line:#D8DFD9;
+  --brand:#1F6B4A;      /* survey green */
+  --brand-ink:#FFFFFF;
+  --water:#2B6CB0;
+  --good:#2F7D4F;
+  --mid:#C98A0B;
+  --bad:#B83A2E;
+  --park:#CFE6C8;
+  --road:#FFFFFF;
+  --map-bg:#EEF2EA;
+  --ad:#EEF1EE;
+  --focus:#2B6CB0;
+  --plate-bg:#FFFFFF;
+  --plate-ink:#111111;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1722;--surface:#16212F;--ink:#E7EDF3;--ink-2:#9FB0C2;--line:#2A3747;
+    --brand:#4FB485;--brand-ink:#08140E;--water:#6AA8E8;--good:#5CC08A;--mid:#E2B13C;--bad:#E8766A;
+    --park:#20402C;--road:#2A3747;--map-bg:#1A2633;--ad:#1B2735;--focus:#6AA8E8;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1722;--surface:#16212F;--ink:#E7EDF3;--ink-2:#9FB0C2;--line:#2A3747;
+  --brand:#4FB485;--brand-ink:#08140E;--water:#6AA8E8;--good:#5CC08A;--mid:#E2B13C;--bad:#E8766A;
+  --park:#20402C;--road:#2A3747;--map-bg:#1A2633;--ad:#1B2735;--focus:#6AA8E8;color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;overflow-x:clip;background:var(--paper);color:var(--ink);font:400 16px/1.55 "Schibsted Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--water)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+h1,h2,h3{line-height:1.15;margin:0;letter-spacing:-.01em}
+.num{font-family:Overpass,"Schibsted Grotesk",sans-serif;font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* demo banner */
+.demo-bar{background:var(--ink);color:var(--paper);font-size:13px}
+.demo-bar .wrap{display:flex;gap:12px;align-items:center;justify-content:space-between;padding-top:6px;padding-bottom:6px;flex-wrap:wrap}
+.demo-bar button{background:transparent;border:1px solid currentColor;border-radius:999px;padding:2px 10px;cursor:pointer;font-size:13px}
+.demo-bar button[aria-pressed="true"]{background:var(--paper);color:var(--ink)}
+
+/* header */
+header.top{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+header.top .wrap{display:flex;align-items:center;gap:16px;height:60px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:19px;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
+.logo svg{flex:none}
+.top-search{flex:1;max-width:420px;display:flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
+.top-search input{flex:1;border:0;background:transparent;padding:8px 12px;min-width:0}
+.top-search input:focus{outline:none}
+.top-search:focus-within{border-color:var(--focus)}
+nav.main{display:flex;gap:4px;margin-left:auto}
+nav.main a,nav.main button{color:var(--ink);text-decoration:none;padding:8px 10px;border-radius:6px;font-weight:500;background:none;border:0;cursor:pointer;white-space:nowrap}
+nav.main a:hover,nav.main button:hover{background:var(--paper)}
+.cmp-count{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:10px;background:var(--brand);color:var(--brand-ink);font-size:12px;font-weight:700;margin-left:4px;padding:0 5px}
+@media (max-width:760px){.top-search{display:none}nav.main .hide-sm{display:none}}
+
+.view{display:none}
+.view.on{display:block}
+
+/* ================= HOME ================= */
+.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:var(--surface)}
+.hero .contours{position:absolute;inset:0;width:100%;height:100%;color:var(--brand);opacity:.16;pointer-events:none}
+.hero .wrap{position:relative;padding-top:72px;padding-bottom:64px}
+.hero h1{font-size:clamp(34px,5.4vw,60px);font-weight:800;max-width:15ch;letter-spacing:-.03em}
+.hero p.lede{font-size:19px;color:var(--ink-2);max-width:52ch;margin:16px 0 28px}
+.big-search{display:flex;max-width:640px;background:var(--surface);border:2px solid var(--ink);border-radius:12px;overflow:hidden;box-shadow:0 6px 0 var(--ink)}
+.big-search input{flex:1;border:0;padding:18px 18px;font-size:19px;background:transparent;min-width:0}
+.big-search input:focus{outline:none}
+.big-search button{border:0;background:var(--brand);color:var(--brand-ink);font-weight:700;padding:0 26px;font-size:17px;cursor:pointer}
+.suggest{max-width:640px;margin-top:10px;color:var(--ink-2);font-size:15px}
+.suggest button{background:none;border:0;padding:0;color:var(--water);text-decoration:underline;text-underline-offset:3px;cursor:pointer;margin:0 6px 0 0}
+.who{margin-top:36px}
+.who h2{font-size:15px;font-weight:600;color:var(--ink-2);margin-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;cursor:pointer;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+.home-sec{padding:56px 0;border-bottom:1px solid var(--line)}
+.home-sec h2{font-size:28px;font-weight:800;margin-bottom:8px}
+.home-sec p.sub{color:var(--ink-2);margin:0 0 24px;max-width:60ch}
+
+.free-table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:15px}
+.free-table th,.free-table td{padding:11px 14px;border-bottom:1px solid var(--line);text-align:left}
+.free-table thead th{font-weight:600;color:var(--ink-2);font-size:14px;background:var(--paper)}
+.free-table td.us{font-weight:700;color:var(--good)}
+.free-table td.paid{color:var(--ink-2)}
+.table-scroll{overflow-x:auto;border-radius:10px}
+
+.areas{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.area-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;text-decoration:none;color:var(--ink);display:grid;gap:10px;cursor:pointer;text-align:left}
+.area-card:hover{border-color:var(--ink)}
+.area-card .name{font-weight:700;font-size:18px}
+.area-card .meta{color:var(--ink-2);font-size:14px}
+
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.tool{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--brand);border-radius:8px;padding:18px}
+.tool h3{font-size:18px;margin-bottom:6px}
+.tool p{margin:0;color:var(--ink-2);font-size:15px}
+
+/* ================= REPORT ================= */
+.crumbs{font-size:14px;color:var(--ink-2);padding:14px 0 0}
+.crumbs a{color:var(--ink-2)}
+.r-head{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;padding:16px 0 28px}
+@media (max-width:900px){.r-head{grid-template-columns:minmax(0,1fr)}}
+.plate{display:inline-block;background:var(--plate-bg);color:var(--plate-ink);border:3px solid var(--plate-ink);box-shadow:0 0 0 4px var(--plate-bg),0 0 0 5px var(--line);border-radius:6px;padding:6px 16px 2px;font:800 clamp(40px,6vw,64px)/1 Overpass,sans-serif;letter-spacing:.01em;margin:6px 0 14px 5px}
+.plate small{font-size:.32em;font-weight:600;display:block;letter-spacing:0;padding-bottom:6px;color:#444}
+.r-title h1{font-size:clamp(24px,3vw,32px);font-weight:800}
+.r-title .where{color:var(--ink-2);margin:4px 0 14px}
+.r-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--ink);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer;text-decoration:none;font-size:15px}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+
+/* map */
+.map{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--map-bg);min-height:300px}
+.map svg{display:block;width:100%;height:100%}
+.map .layers{position:absolute;left:10px;bottom:10px;display:flex;flex-wrap:wrap;gap:6px}
+.map .layers button{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 9px;font-size:13px;cursor:pointer}
+.map .layers button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.map .scale{position:absolute;right:10px;bottom:12px;font-size:11px;color:var(--ink-2)}
+.layer{transition:opacity .25s}
+.layer.off{opacity:0}
+
+/* score panel */
+.score-panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:28px}
+.score-top{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center}
+@media (max-width:620px){.score-top{grid-template-columns:minmax(0,1fr)}}
+.score-num{font:800 76px/0.9 Overpass,sans-serif;letter-spacing:-.02em}
+.score-num span{font-size:22px;color:var(--ink-2);font-weight:600}
+.score-desc{color:var(--ink-2);font-size:15px;margin-top:6px;max-width:28ch}
+.persona-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.persona-tabs .chip{font-size:14px;padding:5px 12px}
+.groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;margin-top:18px}
+@media (max-width:620px){.groups{grid-template-columns:1fr}}
+.grp{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:14px}
+.grp .g-name{font-weight:600}
+.grp .g-w{color:var(--ink-2);font-size:12px}
+.grp .strip{grid-column:1/-1}
+.grp.zero{opacity:.45}
+details.weights{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+details.weights summary{cursor:pointer;font-weight:600;color:var(--water)}
+.sliders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin-top:12px}
+@media (max-width:620px){.sliders{grid-template-columns:1fr}}
+.sliders label{display:grid;grid-template-columns:1fr 110px 18px;gap:8px;align-items:center;font-size:14px}
+.sliders input[type=range]{accent-color:var(--brand);width:100%}
+.missing{font-size:13px;color:var(--mid);margin-top:10px}
+
+.verdict{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+@media (max-width:620px){.verdict{grid-template-columns:minmax(0,1fr)}}
+.verdict h3{font-size:15px;margin-bottom:8px}
+.verdict ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.verdict li{padding:9px 12px;border-radius:8px;font-size:15px;border-left:4px solid}
+.verdict .plus li{border-color:var(--good);background:color-mix(in srgb,var(--good) 9%,transparent)}
+.verdict .minus li{border-color:var(--mid);background:color-mix(in srgb,var(--mid) 11%,transparent)}
+.verdict li a{color:inherit}
+
+/* scale-bar strip: the signature element */
+.strip{position:relative;height:10px;border:1px solid var(--ink);border-radius:2px;margin:6px 0 2px;
+  background:repeating-linear-gradient(90deg,var(--ink) 0 10%,var(--surface) 10% 20%)}
+.strip::after{content:"";position:absolute;top:-6px;bottom:-6px;left:calc(var(--p)*1%);width:4px;margin-left:-2px;border-radius:2px;background:var(--pc,var(--brand));box-shadow:0 0 0 2px var(--surface);transition:left .5s cubic-bezier(.3,.8,.3,1)}
+
+/* report body */
+.r-body{display:grid;grid-template-columns:200px minmax(0,1fr) 300px;gap:28px;align-items:start;padding-bottom:60px}
+@media (max-width:1100px){.r-body{grid-template-columns:180px minmax(0,1fr)}.rail{display:none}}
+@media (max-width:760px){.r-body{grid-template-columns:minmax(0,1fr)}}
+.toc{position:sticky;top:76px;font-size:14px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;border-left:3px solid transparent}
+.toc a.on{color:var(--ink);font-weight:600;border-left-color:var(--brand);background:var(--surface)}
+@media (max-width:760px){
+  .toc{top:60px;z-index:20;background:var(--paper);margin:0 -16px;padding:8px 16px;border-bottom:1px solid var(--line)}
+  .toc ol{display:flex;overflow-x:auto;gap:4px;scrollbar-width:none}
+  .toc a{white-space:nowrap;border-left:0;border-bottom:3px solid transparent;border-radius:0}
+  .toc a.on{border-bottom-color:var(--brand);background:none}
+}
+.rail{position:sticky;top:76px;display:grid;gap:16px}
+section.rs{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:20px;scroll-margin-top:80px}
+section.rs h2{font-size:22px;font-weight:800}
+section.rs .sum{color:var(--ink-2);margin:6px 0 18px;max-width:62ch}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px}
+@media (max-width:620px){.metrics{grid-template-columns:1fr}}
+.metric .m-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.metric .m-name{font-weight:600;font-size:15px}
+.metric .m-val{font:800 22px/1 Overpass,sans-serif}
+.metric .m-note{font-size:14px;margin:2px 0 0}
+.metric .m-src{font-size:12px;color:var(--ink-2);margin:2px 0 0}
+.metric .m-src a{color:var(--ink-2)}
+.sub-h{font-size:16px;font-weight:700;margin:24px 0 10px}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--ink-2);flex-wrap:wrap}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;background:var(--brand)}
+.legend i.dash{background:repeating-linear-gradient(90deg,var(--ink-2) 0 4px,transparent 4px 7px)}
+table.data{width:100%;border-collapse:collapse;font-size:14px}
+table.data th,table.data td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+table.data th{color:var(--ink-2);font-weight:600}
+table.data td.r,table.data th.r{text-align:right}
+.bars{display:grid;gap:8px}
+.bar-row{display:grid;grid-template-columns:150px 1fr 54px;gap:10px;align-items:center;font-size:14px}
+.bar-row .b{height:12px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar-row .b span{display:block;height:100%;background:var(--ink)}
+.flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.flag{border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.flag .f-k{font-size:13px;color:var(--ink-2)}
+.flag .f-v{font-weight:700;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dot.g{background:var(--good)}.dot.m{background:var(--mid)}.dot.b{background:var(--bad)}.dot.n{background:var(--ink-2)}
+.flag .f-s{font-size:12px;color:var(--ink-2)}
+.ofsted{display:inline-block;font-size:12px;font-weight:700;border-radius:4px;padding:2px 7px;border:1px solid}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end;background:var(--paper);border-radius:10px;padding:16px}
+.calc label{display:grid;gap:4px;font-size:14px;font-weight:600}
+.calc input,.calc select{border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;background:var(--surface)}
+.calc-out{font-size:15px;grid-column:1/-1}
+.calc-out b{font:800 28px Overpass,sans-serif;display:block}
+.nearby{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.nearby button{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;cursor:pointer}
+.nearby button b{display:block;font:800 18px Overpass,sans-serif}
+.nearby button span{font-size:13px;color:var(--ink-2)}
+.report-err{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;font-size:14px;color:var(--ink-2)}
+
+/* ads */
+.ad{background:var(--ad);border:1px dashed var(--line);border-radius:8px;display:grid;place-items:center;color:var(--ink-2);font-size:12px;margin:0 0 20px;position:relative}
+.ad::before{content:"Advertisement";position:absolute;top:6px;left:10px;font-size:11px}
+.ad.leader{height:100px}
+.ad.inline{height:280px}
+.ad.side{height:600px;margin:0}
+@media (max-width:620px){.ad.leader{height:100px}.ad.inline{height:250px}}
+
+/* compare tray + view */
+.tray{position:fixed;left:50%;bottom:16px;transform:translate(-50%,140%);background:var(--ink);color:var(--paper);border-radius:12px;padding:10px 12px 10px 16px;display:flex;align-items:center;gap:12px;z-index:40;transition:transform .3s cubic-bezier(.3,.8,.3,1);max-width:calc(100% - 32px);box-shadow:0 10px 30px rgba(10,20,30,.25)}
+.tray.show{transform:translate(-50%,0)}
+.tray .pills{display:flex;gap:6px;flex-wrap:wrap}
+.tray .pill{background:color-mix(in srgb,var(--paper) 14%,transparent);border-radius:6px;padding:3px 8px;font:700 14px Overpass,sans-serif}
+.tray button{background:var(--brand);color:var(--brand-ink);border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;white-space:nowrap}
+.cmp-head{padding:28px 0 16px}
+.cmp-head h1{font-size:30px;font-weight:800}
+.cmp-head p{color:var(--ink-2);margin:6px 0 0}
+table.cmp{width:100%;border-collapse:collapse;background:var(--surface);font-size:15px;min-width:640px}
+table.cmp th,table.cmp td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.cmp thead th{font:800 22px Overpass,sans-serif;position:sticky;top:0;background:var(--surface)}
+table.cmp thead th small{display:block;font:500 13px "Schibsted Grotesk",sans-serif;color:var(--ink-2)}
+table.cmp tbody th{font-weight:600;width:200px;color:var(--ink-2)}
+table.cmp td.best{background:color-mix(in srgb,var(--good) 12%,transparent);font-weight:700}
+table.cmp tr.score td{font:800 30px Overpass,sans-serif}
+.cmp-wrap{border:1px solid var(--line);border-radius:12px;overflow:auto;margin-bottom:40px}
+
+/* UX notes (for the team) */
+.ux{display:none;background:#FFF6CC;color:#3A2E00;border:1px solid #E7CF62;border-radius:8px;padding:10px 12px;font-size:13.5px;line-height:1.45;margin:10px 0}
+.ux b{display:block;margin-bottom:2px}
+body.notes .ux{display:block}
+
+footer.site{border-top:1px solid var(--line);padding:32px 0 60px;font-size:13px;color:var(--ink-2)}
+footer.site .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;margin-bottom:20px}
+footer.site h3{font-size:14px;color:var(--ink);margin-bottom:8px}
+footer.site ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+footer.site a{color:var(--ink-2)}
+
+/* page load: score needle sweep is the one orchestrated moment */
+@keyframes rise{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.score-num.anim{animation:rise .5s ease-out}
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <div class="wrap">
+    <span>Bản demo giao diện. Số liệu là minh hoạ, không phải dữ liệu thật.</span>
+    <span style="display:flex;gap:8px">
+      <button id="notesBtn" aria-pressed="false">Hiện ghi chú UX</button>
+      <button id="themeBtn" aria-pressed="false">Đổi sáng/tối</button>
+    </span>
+  </div>
+</div>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#home" aria-label="ZoneCheck home">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="var(--brand)"/><path d="M6 9h14L6 18h14" stroke="var(--brand-ink)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ZoneCheck
+    </a>
+    <form class="top-search" role="search" onsubmit="go(event,this.q.value)">
+      <label class="sr" for="tq">Search a postcode or place</label>
+      <input id="tq" name="q" placeholder="Postcode, town or school">
+    </form>
+    <nav class="main" aria-label="Main">
+      <a href="#home" class="hide-sm">Rankings</a>
+      <a href="#report-costs" class="hide-sm">Calculators</a>
+      <a href="#compare">Compare<span class="cmp-count num" id="navCount">0</span></a>
+    </nav>
+  </div>
+</header>
+
+<!-- ======================= HOME ======================= -->
+<main id="home" class="view on">
+  <div class="hero">
+    <svg class="contours" viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true" id="contours"></svg>
+    <div class="wrap">
+      <h1>Every fact about an area, before you move there.</h1>
+      <p class="lede">Prices, crime, schools, flood risk, broadband and 40 more checks for any postcode in England and Wales. Every figure shows its source. All of it is free.</p>
+      <form class="big-search" role="search" onsubmit="go(event,this.q.value)">
+        <label class="sr" for="hq">Postcode, town or school</label>
+        <input id="hq" name="q" placeholder="Try SE15 4NX or Peckham" autocomplete="off">
+        <button type="submit">Check area</button>
+      </form>
+      <p class="suggest">Recent searches:
+        <button onclick="openReport()">SE15 4</button>
+        <button onclick="openReport()">Peckham</button>
+        <button onclick="openReport()">Harris Academy</button>
+      </p>
+      <div class="ux"><b>Vì sao ô tìm kiếm lớn và đặt giữa?</b>CrystalRoof và PostcodeCheck đều dồn ô tìm kiếm xuống dưới banner, carousel và 4–5 nút lựa chọn. 90% người vào trang chủ chỉ cần gõ postcode, nên ô tìm là thứ duy nhất được làm nổi. Gợi ý chấp nhận cả postcode, tên khu, tên trường.</div>
+
+      <div class="who">
+        <h2>Who's moving? We'll weight the score for you.</h2>
+        <div class="chips" id="homePersona"></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="home-sec">
+    <div class="wrap">
+      <h2>Free here, paid elsewhere</h2>
+      <p class="sub">Other area-check sites lock these behind a report fee or subscription. We show them on every area page.</p>
+      <div class="table-scroll">
+      <table class="free-table">
+        <thead><tr><th>Check</th><th>ZoneCheck</th><th>Typical cost elsewhere</th></tr></thead>
+        <tbody>
+          <tr><td>Compare up to 4 areas side by side</td><td class="us">Free</td><td class="paid">£2.99 per comparison</td></tr>
+          <tr><td>Radon and coal mining check</td><td class="us">Free</td><td class="paid">In £4.99–£24.99 reports</td></tr>
+          <tr><td>Listed buildings, conservation areas, green belt</td><td class="us">Free</td><td class="paid">Premium report or subscription</td></tr>
+          <tr><td>Area score weighted for buyers, renters, families</td><td class="us">Free</td><td class="paid">One fixed score, method not shown</td></tr>
+          <tr><td>Downloadable PDF report and share link</td><td class="us">Free</td><td class="paid">£24.99+</td></tr>
+          <tr><td>Find areas that match what you need</td><td class="us">Free</td><td class="paid">Top 3 free, rest paid</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="ux"><b>Lợi thế cạnh tranh nói thẳng, không tô vẽ</b>PostcodeCheck dùng bảng so sánh với Rightmove/Zoopla. Ta so sánh trực tiếp từng tính năng mà đối thủ thu tiền (theo ma trận tính năng ở PLAN.md mục 1.3), không nêu tên đối thủ để tránh rủi ro pháp lý.</div>
+    </div>
+  </section>
+
+  <section class="home-sec">
+    <div class="wrap">
+      <h2>Popular this month</h2>
+      <p class="sub">Score shown for <span id="homePersonaName">first-time buyers</span>. Change who's moving above to re-rank.</p>
+      <div class="areas" id="homeAreas"></div>
+    </div>
+  </section>
+
+  <section class="home-sec">
+    <div class="wrap">
+      <h2>Work out the costs</h2>
+      <p class="sub">Calculators use current England and Wales rates and link back to the areas you've viewed.</p>
+      <div class="tools">
+        <a class="tool" href="#report-costs" style="text-decoration:none;color:inherit"><h3>Stamp duty</h3><p>Includes first-time buyer relief and the second-home surcharge.</p></a>
+        <div class="tool"><h3>How much can I borrow?</h3><p>Income multiples used by most UK lenders, with monthly repayments.</p></div>
+        <div class="tool"><h3>Moving costs</h3><p>Solicitor, survey, removals and stamp duty in one total.</p></div>
+        <div class="tool"><h3>Rent or buy</h3><p>Compare 5 and 10 year costs for any area's prices and rents.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ======================= REPORT ======================= -->
+<main id="report" class="view">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="#home">England</a> › <a href="#report">London</a> › <a href="#report">Southwark</a> › <a href="#report">SE15</a> › SE15 4</nav>
+
+    <div class="r-head">
+      <div class="r-title">
+        <div class="plate" aria-label="Postcode sector SE15 4">SE15 4<small>London Borough of Southwark</small></div>
+        <h1>Peckham Rye and Bellenden</h1>
+        <p class="where">Postcode sector, 3,412 homes, 7,960 residents</p>
+        <p style="margin:0;max-width:56ch">Busy, well-connected corner of south-east London with Overground and Thameslink trains, a big park, and prices just above the London average. Crime is higher than most of England, mainly around Rye Lane.</p>
+        <div class="r-actions">
+          <button class="btn" id="cmpBtn" aria-pressed="false" onclick="toggleCompare('SE15 4')">Add to compare</button>
+          <button class="btn" onclick="this.textContent='Link copied'">Share</button>
+          <button class="btn" onclick="this.textContent='Preparing PDF…'">Download PDF</button>
+          <button class="btn" onclick="this.textContent='Watching this area'">Get updates</button>
+        </div>
+        <div class="ux"><b>Biển tên đường kiểu UK làm điểm nhận diện</b>Postcode hiển thị như biển tên đường Anh (nền trắng, viền đen). Người Anh nhận ra ngay, và chính postcode là thứ họ vừa gõ. CrystalRoof chỉ dùng breadcrumb chữ nhỏ. PDF, chia sẻ, theo dõi: đối thủ thu tiền, ta để nút ngay đầu trang.</div>
+      </div>
+      <div class="map" id="map" aria-label="Map of SE15 4">
+        <svg viewBox="0 0 520 340" role="img" aria-labelledby="mapT"><title id="mapT">Map of SE15 4 with stations, schools and the sector boundary</title>
+          <rect width="520" height="340" fill="var(--map-bg)"/>
+          <path d="M300 200 C360 190 420 210 470 250 L520 260 L520 340 L330 340 C320 300 300 260 300 200Z" fill="var(--park)"/>
+          <text x="410" y="300" font-size="12" fill="var(--good)" font-weight="600">Peckham Rye Park</text>
+          <g stroke="var(--road)" stroke-linecap="round" fill="none">
+            <path d="M0 70 L520 90" stroke-width="10"/>
+            <path d="M210 0 C215 120 230 220 260 340" stroke-width="9"/>
+            <path d="M0 180 C120 175 200 170 300 200" stroke-width="6"/>
+            <path d="M120 0 L140 340" stroke-width="5"/>
+            <path d="M330 0 L310 200" stroke-width="5"/>
+            <path d="M400 90 L380 230" stroke-width="4"/>
+            <path d="M0 260 L260 250" stroke-width="4"/>
+          </g>
+          <g font-size="10" fill="var(--ink-2)">
+            <text x="20" y="62">Peckham High St</text>
+            <text x="222" y="140" transform="rotate(84 222 140)">Rye Lane</text>
+            <text x="20" y="172">Choumert Rd</text>
+            <text x="30" y="252">Bellenden Rd</text>
+          </g>
+          <path d="M0 120 L520 140" stroke="var(--ink)" stroke-width="3" stroke-dasharray="10 6"/>
+          <path d="M60 0 L520 230" stroke="var(--ink-2)" stroke-width="2.5" stroke-dasharray="8 6"/>
+          <path d="M40 30 L360 40 L420 200 L330 320 L60 300 Z" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-dasharray="2 5" stroke-linecap="round"/>
+          <g class="layer" id="lyr-crime">
+            <circle cx="225" cy="110" r="46" fill="var(--bad)" opacity=".22"/>
+            <circle cx="230" cy="120" r="24" fill="var(--bad)" opacity=".28"/>
+            <circle cx="150" cy="70" r="28" fill="var(--bad)" opacity=".18"/>
+          </g>
+          <g class="layer" id="lyr-flood"><path d="M0 300 C80 290 140 320 200 340 L0 340Z" fill="var(--water)" opacity=".3"/></g>
+          <g class="layer" id="lyr-stations">
+            <g transform="translate(226 128)"><circle r="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/><text x="14" y="4" font-size="12" font-weight="700" fill="var(--ink)">Peckham Rye</text></g>
+            <g transform="translate(118 74)"><circle r="7" fill="var(--surface)" stroke="var(--ink)" stroke-width="3"/><text x="-8" y="-12" font-size="11" font-weight="700" fill="var(--ink)">Queens Rd</text></g>
+          </g>
+          <g class="layer" id="lyr-schools" fill="var(--water)">
+            <g transform="translate(160 220)"><rect x="-7" y="-7" width="14" height="14" rx="3"/><text x="11" y="4" font-size="10" fill="var(--ink)">Holly Grove Primary</text></g>
+            <g transform="translate(350 160)"><rect x="-7" y="-7" width="14" height="14" rx="3"/><text x="11" y="4" font-size="10" fill="var(--ink)">Rye Park Academy</text></g>
+            <g transform="translate(90 140)"><rect x="-7" y="-7" width="14" height="14" rx="3"/></g>
+          </g>
+        </svg>
+        <div class="layers" role="group" aria-label="Map layers">
+          <button aria-pressed="true" data-l="stations">Stations</button>
+          <button aria-pressed="true" data-l="schools">Schools</button>
+          <button aria-pressed="false" data-l="crime">Crime</button>
+          <button aria-pressed="false" data-l="flood">Flood</button>
+        </div>
+        <div class="scale">200 m</div>
+      </div>
+    </div>
+
+    <!-- Score panel -->
+    <div class="score-panel" id="score">
+      <h2 class="sr">Area score</h2>
+      <div class="persona-tabs" role="group" aria-label="Who is moving" id="personaTabs"></div>
+      <div class="score-top">
+        <div>
+          <div class="score-num" id="scoreNum" aria-live="polite">0<span>/100</span></div>
+          <p class="score-desc" id="scoreDesc"></p>
+        </div>
+        <div class="verdict">
+          <div class="plus"><h3>Works well for you</h3><ul id="plus"></ul></div>
+          <div class="minus"><h3>Check before you commit</h3><ul id="minus"></ul></div>
+        </div>
+      </div>
+      <div class="groups" id="groups"></div>
+      <details class="weights">
+        <summary>Change what matters to you</summary>
+        <div class="sliders" id="sliders"></div>
+        <p class="missing">Connectivity uses 2025 Ofcom data for this sector. Scores rank this sector against all 11,800 sectors in England. <a href="#report">How the score works</a></p>
+      </details>
+      <div class="ux"><b>Điểm theo vai trò, đổi ngay trên trang</b>PostcodeCheck chỉ đưa một số 0–100 không giải thích. CrystalRoof dùng "7/10" từng mục, không có điểm tổng. Ở đây: chọn vai trò → điểm, 3 điểm mạnh, 3 điểm cần lưu ý đổi ngay. Kéo thanh trượt để tự đặt trọng số. Mỗi nhóm có thước phân vị để thấy điểm đến từ đâu (PLAN mục 3.5).</div>
+    </div>
+
+    <div class="ad leader">728×90 / 320×100, reserved height</div>
+    <div class="ux"><b>Quảng cáo đặt sẵn khung</b>Khung giữ chiều cao cố định để CLS < 0,1. Vị trí theo PLAN 5.5: 1 sau phần đầu, 1 sau mỗi 2–3 section, 1 sticky ở cột phải trên desktop. Không đặt sát bản đồ hay nút bấm.</div>
+
+    <div class="r-body">
+      <nav class="toc" aria-label="Report sections"><ol id="toc"></ol></nav>
+      <div id="sections"></div>
+      <aside class="rail" aria-label="Sponsored">
+        <div class="ad side">300×600, sticky</div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- ======================= COMPARE ======================= -->
+<main id="compare" class="view">
+  <div class="wrap">
+    <div class="cmp-head">
+      <h1>Compare areas</h1>
+      <p id="cmpSub">Best value in each row is highlighted. Scores are for first-time buyers.</p>
+    </div>
+    <div class="persona-tabs" role="group" aria-label="Who is moving" id="cmpPersona" style="margin-bottom:16px"></div>
+    <div class="cmp-wrap"><table class="cmp" id="cmpTable"></table></div>
+    <div class="ux"><b>So sánh miễn phí tới 4 khu</b>PostcodeCheck thu £2,99 cho mỗi lần so sánh 2 khu. Ở đây thêm từ bất kỳ trang khu nào bằng nút "Add to compare", khay so sánh luôn nằm dưới đáy màn hình. Ô tốt nhất mỗi hàng được tô màu để quét nhanh.</div>
+  </div>
+</main>
+
+<div class="tray" id="tray" role="region" aria-label="Compare tray">
+  <span class="pills" id="trayPills"></span>
+  <button onclick="location.hash='compare'">Compare now</button>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="cols">
+      <div><h3>Area reports</h3><ul><li><a href="#report">Postcodes</a></li><li><a href="#report">Towns and cities</a></li><li><a href="#report">Schools</a></li><li><a href="#report">Stations</a></li></ul></div>
+      <div><h3>Tools</h3><ul><li><a href="#compare">Compare areas</a></li><li><a href="#home">Where should I live?</a></li><li><a href="#report-costs">Stamp duty</a></li><li><a href="#home">Mortgage</a></li></ul></div>
+      <div><h3>About the data</h3><ul><li><a href="#report">Sources and update dates</a></li><li><a href="#report">How scores work</a></li><li><a href="#report">Glossary</a></li><li><a href="#report">Report an error</a></li></ul></div>
+    </div>
+    <p>Contains HM Land Registry data © Crown copyright and database right 2026. Contains public sector information licensed under the Open Government Licence v3.0. Contains OS data © Crown copyright and database right 2026. Contains Royal Mail data © Royal Mail copyright and database right 2026. © OpenStreetMap contributors.</p>
+  </div>
+</footer>
+
+<script>
+/* ---------- data ---------- */
+const GROUPS=[
+  {k:'afford',n:'Affordability'},{k:'safety',n:'Safety'},{k:'schools',n:'Schools'},{k:'transport',n:'Transport'},
+  {k:'amen',n:'Amenities and health'},{k:'env',n:'Environment and risk'},{k:'conn',n:'Connectivity'},{k:'econ',n:'Local economy'}
+];
+const PERSONAS=[
+  {k:'buyer',n:'First-time buyer',w:{afford:5,safety:3,schools:1,transport:3,amen:2,env:3,conn:2,econ:2}},
+  {k:'renter',n:'Renter',w:{afford:5,safety:3,schools:0,transport:5,amen:3,env:1,conn:3,econ:0}},
+  {k:'family',n:'Family',w:{afford:2,safety:5,schools:5,transport:2,amen:3,env:3,conn:1,econ:1}},
+  {k:'commuter',n:'Commuter',w:{afford:2,safety:2,schools:0,transport:5,amen:1,env:1,conn:3,econ:0}},
+  {k:'retiree',n:'Retiring',w:{afford:2,safety:4,schools:0,transport:2,amen:5,env:5,conn:1,econ:1}}
+];
+const AREAS={
+  'SE15 4':{name:'Peckham Rye',lad:'Southwark',p:{afford:31,safety:24,schools:72,transport:89,amen:86,env:44,conn:92,econ:47},
+    price:522000,ppsm:7420,rent:1950,crime:112,flood:'Low',broadband:'98% gigabit',station:'4 min walk',ofsted:'2 of 3 Good+',ctax:'£1,812'},
+  'SE22 9':{name:'East Dulwich',lad:'Southwark',p:{afford:18,safety:58,schools:84,transport:61,amen:83,env:63,conn:88,econ:71},
+    price:715000,ppsm:8350,rent:2250,crime:64,flood:'Very low',broadband:'95% gigabit',station:'9 min walk',ofsted:'3 of 3 Good+',ctax:'£1,812'},
+  'SE5 8':{name:'Camberwell',lad:'Southwark',p:{afford:36,safety:28,schools:66,transport:74,amen:81,env:39,conn:90,econ:44},
+    price:498000,ppsm:7100,rent:1880,crime:104,flood:'Very low',broadband:'97% gigabit',station:'12 min walk',ofsted:'2 of 3 Good+',ctax:'£1,812'},
+  'SE4 1':{name:'Brockley',lad:'Lewisham',p:{afford:42,safety:46,schools:69,transport:83,amen:70,env:57,conn:86,econ:55},
+    price:478000,ppsm:6900,rent:1790,crime:79,flood:'Very low',broadband:'93% gigabit',station:'6 min walk',ofsted:'3 of 3 Good+',ctax:'£1,920'},
+  'SE13 6':{name:'Lewisham Centre',lad:'Lewisham',p:{afford:47,safety:33,schools:58,transport:91,amen:79,env:35,conn:84,econ:42},
+    price:445000,ppsm:6600,rent:1720,crime:98,flood:'Medium',broadband:'90% gigabit',station:'3 min walk',ofsted:'2 of 3 Good+',ctax:'£1,920'},
+  'SE24 0':{name:'Herne Hill',lad:'Lambeth',p:{afford:22,safety:61,schools:77,transport:72,amen:76,env:66,conn:85,econ:69},
+    price:668000,ppsm:8040,rent:2150,crime:61,flood:'Low',broadband:'92% gigabit',station:'5 min walk',ofsted:'3 of 3 Good+',ctax:'£1,710'}
+};
+const PLUS_TEXT={
+  afford:'Prices lower than most of London',safety:'Lower crime than most areas',schools:'Several Good or Outstanding schools within 1 km',
+  transport:'Peckham Rye station 4 minutes away, 13 minutes to London Bridge',amen:'GP, supermarkets and Peckham Rye Park on the doorstep',
+  env:'Low flood risk and clean air',conn:'Gigabit broadband at 98% of addresses',econ:'Household incomes above average'};
+const MINUS_TEXT={
+  afford:'Median price £522,000, 5.6% above the London average',safety:'Crime rate 112 per 1,000 people, higher than 76% of England',
+  schools:'Some nearby schools are oversubscribed',transport:'Fewer direct routes north of the river',
+  amen:'Nearest GP practices have long patient lists',env:'NO₂ above the WHO guideline along Rye Lane',
+  conn:'Mobile 5G indoors is patchy',econ:'Income deprivation higher than the London average'};
+const ANCHOR={afford:'prices',safety:'safety',schools:'schools',transport:'transport',amen:'amenities',env:'environment',conn:'connectivity',econ:'people'};
+
+let persona='buyer';
+let weights={...PERSONAS[0].w};
+const compareSet=new Set();
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const fmt=n=>'£'+Math.round(n).toLocaleString('en-GB');
+function pc(p){return p>=60?'var(--good)':p>=35?'var(--mid)':'var(--bad)'}
+function strip(p){return `<div class="strip" style="--p:${p};--pc:${pc(p)}" role="img" aria-label="Better than ${p}% of areas in England"></div>`}
+function score(a,w){let s=0,t=0;GROUPS.forEach(g=>{s+=a.p[g.k]*w[g.k];t+=w[g.k]});return t?Math.round(s/t):0}
+function band(s){return s>=75?'Excellent match':s>=60?'Good match':s>=45?'Mixed match':'Weak match'}
+
+/* ---------- persona chips ---------- */
+function chips(el,onPick){
+  el.innerHTML=PERSONAS.map(p=>`<button class="chip" data-p="${p.k}" aria-pressed="${p.k===persona}">${p.n}</button>`).join('');
+  el.onclick=e=>{const b=e.target.closest('[data-p]');if(!b)return;onPick(b.dataset.p)};
+}
+function setPersona(k){
+  persona=k;weights={...PERSONAS.find(p=>p.k===k).w};
+  document.querySelectorAll('[data-p]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.p===k));
+  renderScore(true);renderSliders();renderHomeAreas();renderCompare();
+}
+
+/* ---------- home ---------- */
+function renderHomeAreas(){
+  const pname=PERSONAS.find(p=>p.k===persona).n.toLowerCase();
+  $('#homePersonaName').textContent=pname==='retiring'?'people retiring':pname+'s';
+  const list=Object.entries(AREAS).map(([pc_,a])=>({pc:pc_,a,s:score(a,weights)})).sort((x,y)=>y.s-x.s);
+  $('#homeAreas').innerHTML=list.map(({pc:c,a,s})=>`
+    <button class="area-card" onclick="openReport()">
+      <span style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <span><span class="name">${a.name}</span><br><span class="meta">${c}, ${a.lad}</span></span>
+        <span class="num" style="font-size:30px;font-weight:800">${s}</span>
+      </span>
+      ${strip(s)}
+      <span class="meta">Median ${fmt(a.price)}, ${a.crime} crimes per 1,000</span>
+    </button>`).join('');
+}
+function drawContours(){
+  const svg=$('#contours');let d='';
+  for(let i=0;i<14;i++){
+    const cx=930,cy=250,rx=60+i*42,ry=40+i*30;let pts=[];
+    for(let a=0;a<=360;a+=12){const r=a*Math.PI/180,wob=1+0.07*Math.sin(a*Math.PI/45+i)+0.04*Math.cos(a*Math.PI/30-i*.7);
+      pts.push(`${(cx+Math.cos(r)*rx*wob).toFixed(1)},${(cy+Math.sin(r)*ry*wob).toFixed(1)}`)}
+    d+=`<path d="M${pts.join('L')}Z" fill="none" stroke="currentColor" stroke-width="${i%5===4?2.2:1}"/>`;
+  }
+  svg.innerHTML=d;
+}
+
+/* ---------- score ---------- */
+let shown=0;
+function renderScore(anim){
+  const a=AREAS['SE15 4'];const s=score(a,weights);
+  const el=$('#scoreNum');
+  if(anim&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
+    const from=shown,t0=performance.now();
+    const step=t=>{const k=Math.min(1,(t-t0)/500);const v=Math.round(from+(s-from)*(1-Math.pow(1-k,3)));el.firstChild.nodeValue=v;if(k<1)requestAnimationFrame(step)};
+    requestAnimationFrame(step);
+  } else el.firstChild.nodeValue=s;
+  shown=s;
+  const pn=PERSONAS.find(p=>p.k===persona).n;
+  $('#scoreDesc').textContent=`${band(s)} for a ${pn.toLowerCase()==='retiring'?'retiree':pn.toLowerCase()}. Better than ${s}% of sectors in England on what matters to you.`;
+  $('#groups').innerHTML=GROUPS.map(g=>`
+    <div class="grp ${weights[g.k]?'':'zero'}">
+      <span class="g-name">${g.n}</span><span class="g-w">${weights[g.k]?'weight '+weights[g.k]:'not counted'}</span>
+      ${strip(a.p[g.k])}
+    </div>`).join('');
+  const active=GROUPS.filter(g=>weights[g.k]>0).map(g=>({...g,p:a.p[g.k],w:weights[g.k]}));
+  const plus=[...active].sort((x,y)=>(y.p-50)*y.w-(x.p-50)*x.w).filter(g=>g.p>=50).slice(0,3);
+  const minus=[...active].sort((x,y)=>(x.p-50)*x.w-(y.p-50)*y.w).filter(g=>g.p<50).slice(0,3);
+  $('#plus').innerHTML=plus.map(g=>`<li><a href="#report-${ANCHOR[g.k]}">${PLUS_TEXT[g.k]}</a></li>`).join('')||'<li>No standout strengths for this mix</li>';
+  $('#minus').innerHTML=minus.map(g=>`<li><a href="#report-${ANCHOR[g.k]}">${MINUS_TEXT[g.k]}</a></li>`).join('')||'<li>Nothing below average for this mix</li>';
+}
+function renderSliders(){
+  $('#sliders').innerHTML=GROUPS.map(g=>`
+    <label><span>${g.n}</span><input type="range" min="0" max="5" step="1" value="${weights[g.k]}" data-g="${g.k}" aria-label="${g.n} weight"><b class="num" id="w-${g.k}">${weights[g.k]}</b></label>`).join('');
+}
+document.addEventListener('input',e=>{
+  if(!e.target.dataset.g)return;
+  weights[e.target.dataset.g]=+e.target.value;$('#w-'+e.target.dataset.g).textContent=e.target.value;renderScore(true);
+});
+
+/* ---------- sections ---------- */
+function metric(name,val,p,note,src){
+  return `<div class="metric"><div class="m-head"><span class="m-name">${name}</span><span class="m-val">${val}</span></div>${p==null?'':strip(p)}<p class="m-note">${note}</p><p class="m-src">${src}</p></div>`;
+}
+function priceChart(){
+  const yrs=[2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026];
+  const loc=[455,468,462,458,471,489,512,498,503,515,522],ldn=[482,486,479,476,488,505,525,510,508,517,494];
+  const W=640,H=220,L=48,R=12,T=14,B=28,min=420,max=560;
+  const x=i=>L+i*(W-L-R)/(yrs.length-1),y=v=>T+(max-v)*(H-T-B)/(max-min);
+  const path=a=>a.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join('');
+  let g='';for(let v=440;v<=560;v+=40)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink-2)">£${v}k</text>`;
+  yrs.forEach((yr,i)=>{if(i%2===0)g+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--ink-2)">${yr}</text>`});
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Median price in SE15 4 rose from £455,000 in 2016 to £522,000 in 2026">${g}
+    <path d="${path(ldn)}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="5 4"/>
+    <path d="${path(loc)}" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="${x(10)}" cy="${y(522)}" r="5" fill="var(--brand)"/><text x="${x(10)-8}" y="${y(522)-10}" text-anchor="end" font-size="12" font-weight="700" fill="var(--ink)">£522k</text></svg>
+    <div class="legend"><span><i></i>SE15 4</span><span><i class="dash"></i>London</span></div>`;
+}
+function bars(rows){
+  const m=Math.max(...rows.map(r=>r[1]));
+  return `<div class="bars">${rows.map(r=>`<div class="bar-row"><span>${r[0]}</span><span class="b"><span style="width:${r[1]/m*100}%"></span></span><span class="num" style="text-align:right">${r[1]}</span></div>`).join('')}</div>`;
+}
+function flag(k,v,c,s){return `<div class="flag"><span class="f-k">${k}</span><span class="f-v"><span class="dot ${c}"></span>${v}</span><span class="f-s">${s}</span></div>`}
+function ofs(t){const c=t==='Outstanding'?'var(--good)':t==='Good'?'var(--water)':'var(--mid)';return `<span class="ofsted" style="color:${c}">${t}</span>`}
+
+const SECTIONS=[
+ {id:'prices',t:'Property prices',s:'Prices rose 15% in ten years, a little faster than London overall. Victorian terraces around Bellenden Road sell for well over £800,000, while flats near Rye Lane start under £400,000.',
+  h:()=>`<div class="metrics">
+   ${metric('Median sale price',fmt(522000),69,'Higher than 69% of sectors in England, 5.6% above London','HM Land Registry, Sep 2025 to Aug 2026, 214 sales')}
+   ${metric('Price per square metre','£7,420',91,'Higher than 91% of sectors in England','Land Registry sales matched to EPC floor area, 168 sales')}
+   ${metric('Flat, median','£395,000',null,'Most sales here are flats (61%)','HM Land Registry, 131 sales')}
+   ${metric('Terraced house, median','£865,000',null,'Up 4.1% on last year','HM Land Registry, 58 sales')}
+  </div>
+  <h3 class="sub-h">Ten-year trend</h3>${priceChart()}
+  <h3 class="sub-h">Recent sales</h3>
+  <div style="overflow-x:auto"><table class="data"><thead><tr><th>Street</th><th>Type</th><th>Date</th><th class="r">Price</th></tr></thead><tbody>
+   <tr><td>Choumert Grove</td><td>Terraced, freehold</td><td>Aug 2026</td><td class="r num">£905,000</td></tr>
+   <tr><td>Rye Lane</td><td>Flat, leasehold</td><td>Aug 2026</td><td class="r num">£362,500</td></tr>
+   <tr><td>Bellenden Road</td><td>Flat, leasehold</td><td>Jul 2026</td><td class="r num">£445,000</td></tr>
+   <tr><td>Lyndhurst Way</td><td>Semi-detached, freehold</td><td>Jul 2026</td><td class="r num">£1,240,000</td></tr>
+  </tbody></table></div>`},
+ {id:'rent',t:'Renting',s:'Rents are close to the Southwark average. A two-bedroom flat takes about 44% of the median local household income.',
+  h:()=>`<div class="metrics">
+   ${metric('Two-bed rent, monthly','£1,950',78,'Higher than 78% of sectors in England','Estimate from ONS PIPR (Southwark) and local prices, Jul 2026')}
+   ${metric('Rent to income','44%',22,'Less affordable than 78% of areas','ONS small area income 2023, ONS PIPR 2026')}
+  </div>`},
+ {id:'safety',t:'Safety',s:'Crime is higher than in most of England, as in much of inner London. Most incidents are violence and anti-social behaviour along Rye Lane and around the station. Burglary is close to the national average.',
+  h:()=>`<div class="metrics">
+   ${metric('Crimes per 1,000 people','112',24,'Safer than 24% of sectors in England. London: 96. England: 78','data.police.uk, Sep 2025 to Aug 2026, 892 crimes')}
+   ${metric('Trend, last 12 months','Down 6%',62,'Falling faster than 62% of areas','data.police.uk, compared with previous 12 months')}
+  </div>
+  <h3 class="sub-h">Most common, per 1,000 people</h3>
+  ${bars([['Violence',38],['Anti-social behaviour',21],['Theft',17],['Vehicle crime',9],['Burglary',6],['Drugs',6]])}`},
+ {ad:true},
+ {id:'schools',t:'Schools',s:'Three primaries and one secondary within a kilometre, most rated Good. New Ofsted report cards are shown where a school has had one since November 2025.',
+  h:()=>`<div style="overflow-x:auto"><table class="data"><thead><tr><th>School</th><th>Phase</th><th>Ofsted</th><th class="r">Distance</th></tr></thead><tbody>
+   <tr><td>Holly Grove Primary</td><td>Primary</td><td>${ofs('Outstanding')}</td><td class="r num">0.3 km</td></tr>
+   <tr><td>Rye Park Academy</td><td>Secondary</td><td>${ofs('Good')}</td><td class="r num">0.6 km</td></tr>
+   <tr><td>Choumert Infants</td><td>Primary</td><td>${ofs('Requires improvement')}</td><td class="r num">0.8 km</td></tr>
+  </tbody></table></div>
+  <div class="metrics" style="margin-top:18px">
+   ${metric('Good or Outstanding within 1 km','2 of 3',72,'More than 72% of sectors in England','DfE GIAS and Ofsted, Sep 2026')}
+   ${metric('Furthest offer distance, Holly Grove','0.52 km',null,'Children living further away were not offered a place in 2026','Southwark admissions data, 2026')}
+  </div>`},
+ {id:'transport',t:'Transport',s:'Peckham Rye has Overground and Thameslink trains. London Bridge is 13 minutes away and Victoria 16.',
+  h:()=>`<div class="metrics">
+   ${metric('Nearest station','Peckham Rye, 4 min',89,'Closer than 89% of sectors in England','DfT NaPTAN, walking distance')}
+   ${metric('Public transport access','PTAL 6a',93,'Excellent, top band in London','TfL / London Datastore, 2025')}
+  </div>
+  <h3 class="sub-h">Journey times from Peckham Rye</h3>
+  ${bars([['London Bridge',13],['Victoria',16],['Canary Wharf',24],['King\'s Cross',27],['Heathrow',62]])}`},
+ {id:'amenities',t:'Amenities and health',s:'Plenty within walking distance, including Peckham Rye Park, Rye Lane market and two GP practices. One GP practice has a long patient list.',
+  h:()=>`<div class="metrics">
+   ${metric('Nearest GP','0.4 km',86,'Patients per GP: 2,410 (England: 2,270)','NHS ODS and NHS Digital, Aug 2026')}
+   ${metric('Supermarkets within 1 km','6',88,'More than 88% of sectors in England','OpenStreetMap, Oct 2026')}
+   ${metric('Nearest park','Peckham Rye Park, 0.2 km',90,'Closer than 90% of sectors','OS Open Greenspace, 2026')}
+   ${metric('Food hygiene rated 4 or 5','78%',41,'Better than 41% of sectors','FSA Food Hygiene Ratings, Oct 2026')}
+  </div>`},
+ {ad:true},
+ {id:'environment',t:'Environment and risk',s:'Low flood risk, no coal mining history and low radon. Air along Rye Lane exceeds the WHO guideline for nitrogen dioxide, as in most of inner London.',
+  h:()=>`<div class="flags">
+   ${flag('Rivers and the sea','Very low','g','EA NaFRA2, Jan 2025')}
+   ${flag('Surface water','Low','g','EA RoFSW, 2025. Southern edge of sector')}
+   ${flag('Radon','Under 1% of homes','g','UKHSA/BGS indicative atlas')}
+   ${flag('Coal mining','Not a coal area','g','Coal Authority')}
+   ${flag('Historic landfill','None within 250 m','g','EA Historic Landfill')}
+   ${flag('Air quality, NO₂','23 µg/m³','m','Defra PCM 2024. WHO guideline: 10')}
+   ${flag('Road noise','58 dB daytime','m','Defra noise mapping Round 4')}
+   ${flag('Ground stability','Not available','n','BGS GeoSure is not open data')}
+  </div>
+  <p class="m-src" style="margin-top:12px">Area-level checks describe the surroundings, not an individual building. Ask your conveyancer for a full environmental search.</p>`},
+ {id:'connectivity',t:'Broadband and mobile',s:'Gigabit-capable broadband is available almost everywhere. Indoor 5G is patchy on some side streets.',
+  h:()=>`<div class="metrics">
+   ${metric('Gigabit-capable','98%',92,'Better than 92% of sectors','Ofcom Connected Nations, Spring 2026')}
+   ${metric('4G indoors, all networks','91%',63,'Better than 63% of sectors','Ofcom Connected Nations, Spring 2026')}
+  </div>`},
+ {id:'people',t:'People',s:'Young and mixed: half of residents are 25 to 44, and renting is more common than owning.',
+  h:()=>`<div class="metrics">
+   ${metric('Median age','33',null,'England: 40','Census 2021')}
+   ${metric('Owner-occupied','38%',null,'Private rented 34%, social rented 28%','Census 2021')}
+   ${metric('Household income, median','£44,200',47,'Higher than 47% of areas in England','ONS small area income, 2023')}
+   ${metric('Deprivation','Decile 4 of 10',36,'Less deprived than 36% of neighbourhoods','IoD 2025')}
+  </div>`},
+ {id:'energy',t:'Homes and energy',s:'Mostly Victorian terraces and converted flats. Over half of homes are rated D or below, so check heating bills.',
+  h:()=>bars([['EPC A–B',6],['EPC C',38],['EPC D',41],['EPC E',11],['EPC F–G',4]])+'<p class="m-src">MHCLG EPC register, latest certificate per address, 2,904 homes. Figures in %.</p>'},
+ {id:'planning',t:'Planning and conservation',s:'Part of the sector is in the Holly Grove conservation area, where changes to windows and front gardens need permission.',
+  h:()=>`<div class="flags">
+   ${flag('Conservation area','Holly Grove','m','planning.data.gov.uk')}
+   ${flag('Listed buildings','14 within sector','n','Historic England')}
+   ${flag('Article 4 direction','Yes, in part','m','planning.data.gov.uk')}
+   ${flag('Green belt','No','g','planning.data.gov.uk')}
+  </div><p class="m-src" style="margin-top:12px">No result does not always mean no restriction. Check with Southwark Council.</p>`},
+ {id:'costs',t:'Running costs',s:'Most homes are in council tax bands C and D. Work out stamp duty for a typical purchase below.',
+  h:()=>`<div class="metrics">
+   ${metric('Council tax, band D','£1,812 a year',null,'Southwark, 2026/27','Southwark Council')}
+   ${metric('Most common band','C (34%)',null,'Then D (29%), B (18%)','VOA Council Tax stock, 2026')}
+  </div>
+  <h3 class="sub-h">Stamp duty calculator</h3>
+  <form class="calc" onsubmit="return false" id="sdlt">
+   <label>Purchase price<input inputmode="numeric" name="price" value="522,000"></label>
+   <label>You are<select name="kind"><option value="ftb">A first-time buyer</option><option value="mover">Moving home</option><option value="add">Buying an additional home</option></select></label>
+   <div class="calc-out" aria-live="polite" id="sdltOut"></div>
+  </form>`},
+ {id:'nearby',t:'Nearby areas',s:'Compare SE15 4 with the sectors around it.',
+  h:()=>`<div class="nearby">${Object.entries(AREAS).filter(([k])=>k!=='SE15 4').map(([k,a])=>`<button onclick="toggleCompare('${k}')"><b>${k}</b><span>${a.name}, ${fmt(a.price)}</span><br><span>Add to compare</span></button>`).join('')}</div>
+  <div class="report-err" style="margin-top:20px"><span>Data last updated 3 October 2026. <a href="#report">See all sources and dates</a></span><button class="btn">Report a mistake</button></div>`}
+];
+function renderSections(){
+  let adN=0;
+  $('#sections').innerHTML=SECTIONS.map(s=>s.ad?`<div class="ad inline">${++adN===1?'336×280 in-content':'Responsive in-content'}, lazy-loaded</div>`:
+    `<section class="rs" id="report-${s.id}" aria-labelledby="h-${s.id}"><h2 id="h-${s.id}">${s.t}</h2><p class="sum">${s.s}</p>${s.h()}</section>`).join('')
+    +`<div class="ux"><b>Mỗi con số có đủ 4 thứ</b>Giá trị, thước phân vị so với England ("Safer than 24%"), kỳ dữ liệu, nguồn và số mẫu (PLAN 3.4). Đối thủ hay chỉ ghi "High crime rate 7/10" mà không nói so với đâu. Mỗi section mở bằng 1–2 câu tóm tắt bằng lời thường, dễ được AI Overviews trích dẫn kèm thương hiệu.</div>
+     <div class="ux"><b>Thiếu dữ liệu thì nói thẳng</b>Sụt lún (BGS GeoSure) không có dữ liệu mở, nên hiển thị "Not available" thay vì ẩn đi. Không khoá mục nào sau nút "Upgrade" như CrystalRoof.</div>`;
+  $('#toc').innerHTML=SECTIONS.filter(s=>!s.ad).map(s=>`<li><a href="#report-${s.id}" data-t="${s.id}">${s.t}</a></li>`).join('');
+}
+
+/* ---------- stamp duty (England, rates from 1 Apr 2025) ---------- */
+function sdlt(price,kind){
+  const bands=[[125000,0],[250000,.02],[925000,.05],[1500000,.10],[Infinity,.12]];
+  const calc=bs=>{let tax=0,prev=0;for(const [top,r] of bs){if(price>prev)tax+=(Math.min(price,top)-prev)*r;prev=top}return tax};
+  if(kind==='ftb'&&price<=500000)return calc([[300000,0],[500000,.05]]);
+  let t=calc(bands);if(kind==='add')t+=price*.05;return t;
+}
+function updSdlt(){
+  const f=$('#sdlt');if(!f)return;const p=+f.price.value.replace(/[^\d]/g,'')||0;const k=f.kind.value;
+  const t=sdlt(p,k);
+  const note=k==='ftb'&&p>500000?'First-time buyer relief does not apply above £500,000.':k==='ftb'?'Includes first-time buyer relief.':k==='add'?'Includes the 5% surcharge for additional homes.':'Standard rates.';
+  $('#sdltOut').innerHTML=`<b>${fmt(t)}</b>Stamp duty on ${fmt(p)}. ${note} Effective rate ${(p?t/p*100:0).toFixed(1)}%.`;
+}
+document.addEventListener('input',e=>{if(e.target.closest('#sdlt'))updSdlt()});
+
+/* ---------- map layers ---------- */
+document.querySelectorAll('.layers button').forEach(b=>{
+  const sync=()=>$('#lyr-'+b.dataset.l).classList.toggle('off',b.getAttribute('aria-pressed')!=='true');
+  sync();b.onclick=()=>{b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true');sync()};
+});
+
+/* ---------- compare ---------- */
+function toggleCompare(k){
+  if(compareSet.has(k))compareSet.delete(k);
+  else{if(compareSet.size>=4){alert('You can compare up to 4 areas. Remove one first.');return}compareSet.add(k)}
+  syncCompare();
+}
+function syncCompare(){
+  $('#navCount').textContent=compareSet.size;
+  $('#trayPills').innerHTML=[...compareSet].map(k=>`<span class="pill">${k}</span>`).join('');
+  $('#tray').classList.toggle('show',compareSet.size>0&&location.hash.replace('#','')!=='compare');
+  const b=$('#cmpBtn');const on=compareSet.has('SE15 4');b.setAttribute('aria-pressed',on);b.textContent=on?'Added to compare':'Add to compare';
+  document.querySelectorAll('.nearby button').forEach(nb=>{const k=nb.querySelector('b').textContent;nb.querySelector('span:last-child').textContent=compareSet.has(k)?'Added to compare':'Add to compare'});
+  renderCompare();
+}
+function renderCompare(){
+  let keys=[...compareSet];if(keys.length<2)keys=['SE15 4','SE22 9','SE5 8','SE4 1'];
+  const A=keys.map(k=>({k,...AREAS[k]}));
+  const pn=PERSONAS.find(p=>p.k===persona).n.toLowerCase();
+  $('#cmpSub').textContent=`Best value in each row is highlighted. Scores are for ${pn==='retiring'?'people retiring':pn+'s'}.`+(compareSet.size<2?' Showing an example set: add areas from any report.':'');
+  const row=(label,vals,better,fmtv,cls='')=>{
+    const best=better?vals.indexOf(better==='hi'?Math.max(...vals):Math.min(...vals)):-1;
+    return `<tr class="${cls}"><th scope="row">${label}</th>${vals.map((v,i)=>`<td class="${i===best?'best':''}">${fmtv?fmtv(v):v}</td>`).join('')}</tr>`;
+  };
+  $('#cmpTable').innerHTML=`<thead><tr><th></th>${A.map(a=>`<th scope="col">${a.k}<small>${a.name}, ${a.lad}</small></th>`).join('')}</tr></thead><tbody>
+   ${row('Area score',A.map(a=>score(a,weights)),'hi',null,'score')}
+   ${row('Median price',A.map(a=>a.price),'lo',fmt)}
+   ${row('Price per m²',A.map(a=>a.ppsm),'lo',fmt)}
+   ${row('Two-bed rent',A.map(a=>a.rent),'lo',v=>fmt(v)+'/mo')}
+   ${row('Crimes per 1,000',A.map(a=>a.crime),'lo')}
+   ${row('Nearest station',A.map(a=>a.station))}
+   ${row('Schools Good+',A.map(a=>a.ofsted))}
+   ${row('Flood risk',A.map(a=>a.flood))}
+   ${row('Broadband',A.map(a=>a.broadband))}
+   ${row('Council tax, band D',A.map(a=>a.ctax))}
+   ${GROUPS.map(g=>row(g.n+' percentile',A.map(a=>a.p[g.k]),'hi')).join('')}
+  </tbody>`;
+}
+
+/* ---------- routing ---------- */
+function route(){
+  const h=location.hash.replace('#','')||'home';
+  const view=h.startsWith('report')?'report':h==='compare'?'compare':'home';
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===view));
+  if(view==='report'&&h.includes('-')){requestAnimationFrame(()=>document.getElementById(h)?.scrollIntoView())}
+  else window.scrollTo(0,0);
+  if(view==='report')renderScore(true);
+  syncCompare();
+}
+function openReport(){location.hash='report'}
+function go(e,q){e.preventDefault();openReport()}
+window.addEventListener('hashchange',route);
+
+/* toc highlight */
+const io=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){const id=en.target.id.replace('report-','');
+  document.querySelectorAll('.toc a').forEach(a=>a.classList.toggle('on',a.dataset.t===id))}})},{rootMargin:'-30% 0px -60% 0px'});
+
+/* demo bar */
+$('#notesBtn').onclick=e=>{const on=document.body.classList.toggle('notes');e.target.setAttribute('aria-pressed',on);e.target.textContent=on?'Ẩn ghi chú UX':'Hiện ghi chú UX'};
+$('#themeBtn').onclick=()=>{const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark'};
+
+/* init */
+drawContours();
+chips($('#homePersona'),setPersona);chips($('#personaTabs'),setPersona);chips($('#cmpPersona'),setPersona);
+renderSections();renderSliders();renderHomeAreas();updSdlt();
+document.querySelectorAll('section.rs').forEach(s=>io.observe(s));
+route();
+</script>
+</body>
+</html>

@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZoneCheck ERD</title>
+<meta name="description" content="Mô hình dữ liệu ZoneCheck: sơ đồ quan hệ theo nhóm và tài liệu đầy đủ từng bảng, cột (sinh tự động từ schema.sql).">
+<style>
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f1f1ee; --border: #e2e1dc;
+  --text: #1d1d1b; --muted: #6b6a64; --accent: #2f6f5e; --accent-soft: #e3efe9;
+  --pk: #a8590b; --pk-soft: #fbeedd; --fk: #2d5fa8; --fk-soft: #e2ebf8; --uq: #7a3f9a; --uq-soft: #f1e6f7;
+  --code: #3a3a36; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151614; --surface: #1d1e1b; --surface-2: #252622; --border: #34352f;
+    --text: #ecebe6; --muted: #a09f97; --accent: #7cc4ad; --accent-soft: #1f3a32;
+    --pk: #f0a95b; --pk-soft: #3a2a17; --fk: #8fb4ee; --fk-soft: #1d2a40; --uq: #d0a2e8; --uq-soft: #33213d;
+    --code: #d6d5cf; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151614; --surface: #1d1e1b; --surface-2: #252622; --border: #34352f;
+  --text: #ecebe6; --muted: #a09f97; --accent: #7cc4ad; --accent-soft: #1f3a32;
+  --pk: #f0a95b; --pk-soft: #3a2a17; --fk: #8fb4ee; --fk-soft: #1d2a40; --uq: #d0a2e8; --uq-soft: #33213d;
+  --code: #d6d5cf; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 76px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--fk); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); font-size: .86em; }
+
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 10px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.brand { font-weight: 650; letter-spacing: -.01em; margin-right: auto; }
+.brand small { color: var(--muted); font-weight: 450; margin-left: 6px; }
+.search { flex: 1 1 260px; max-width: 420px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--muted); padding: 7px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 0; }
+nav.side { position: sticky; top: 57px; height: calc(100vh - 57px); overflow: auto; padding: 16px 12px 40px 20px; border-right: 1px solid var(--border); font-size: 14px; }
+nav.side .grp { margin: 14px 0 4px; font-weight: 600; }
+nav.side .grp a { color: var(--text); }
+nav.side .grp .n { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 4px; }
+nav.side ul { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 1px solid var(--border); }
+nav.side li a { display: block; padding: 2px 6px; color: var(--muted); font-family: var(--mono); font-size: 12.5px; border-radius: 4px; }
+nav.side li a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+main { padding: 24px clamp(16px, 3vw, 40px) 80px; min-width: 0; }
+
+h1 { font-size: 28px; letter-spacing: -.02em; margin: 4px 0 6px; }
+h2 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 4px; }
+.lede { color: var(--muted); max-width: 72ch; margin: 0 0 18px; }
+section.domain { margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--border); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 110px; box-shadow: var(--shadow); }
+.stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 13px; }
+
+.principles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 8px 0 24px; padding: 0; list-style: none; }
+.principles li { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); }
+.principles b { display: block; margin-bottom: 2px; }
+.principles span { color: var(--muted); font-size: 14px; }
+
+table.plain { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 14px; }
+table.plain th, table.plain td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.plain th { background: var(--surface-2); font-weight: 600; font-size: 13px; color: var(--muted); }
+table.plain tr:last-child td { border-bottom: 0; }
+
+.diagram { position: relative; margin: 14px 0 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.diagram .tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 2; }
+.diagram .tools button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; width: 32px; height: 30px; cursor: pointer; font: 14px/1 system-ui; }
+.diagram .tools button.wide { width: auto; padding: 0 8px; font-size: 12px; }
+.diagram .canvas { overflow: auto; max-height: 78vh; padding: 16px; min-height: 120px; }
+.diagram .canvas svg { display: block; height: auto; max-width: none; }
+.diagram .canvas svg [id^="entity-"] { cursor: pointer; }
+.diagram .msg { color: var(--muted); font-size: 14px; padding: 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; margin: -10px 0 18px; }
+
+.cards { display: grid; gap: 16px; }
+article.tbl { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+article.tbl > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 12px 16px 4px; }
+article.tbl h3 { margin: 0; font: 600 16px/1.3 var(--mono); }
+article.tbl h3 .sch { color: var(--muted); font-weight: 450; }
+.badge { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.badge.view { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+article.tbl .comment { margin: 2px 16px 10px; color: var(--muted); font-size: 14px; max-width: 95ch; }
+.colwrap { overflow-x: auto; }
+table.cols { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.cols th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); background: var(--surface-2); padding: 6px 10px; border-top: 1px solid var(--border); white-space: nowrap; }
+table.cols td { padding: 6px 10px; border-top: 1px solid var(--border); vertical-align: top; }
+table.cols td.cname { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+table.cols td.ctype { font-family: var(--mono); font-size: 12.5px; color: var(--code); white-space: nowrap; }
+table.cols td.cons { font-size: 12.5px; color: var(--muted); min-width: 140px; }
+table.cols td.cdesc { min-width: 260px; }
+.k { display: inline-block; font: 700 10px/1 system-ui; padding: 3px 4px; border-radius: 4px; margin-right: 4px; vertical-align: 1px; }
+.k.pk { background: var(--pk-soft); color: var(--pk); }
+.k.fk { background: var(--fk-soft); color: var(--fk); }
+.k.uq { background: var(--uq-soft); color: var(--uq); }
+details.more { border-top: 1px solid var(--border); padding: 8px 16px 10px; font-size: 13.5px; }
+details.more summary { cursor: pointer; color: var(--muted); }
+details.more h4 { margin: 10px 0 4px; font-size: 13px; }
+details.more ul { margin: 0; padding-left: 18px; }
+details.more li { margin: 2px 0; }
+pre.sql { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; overflow: auto; font: 12.5px/1.5 var(--mono); margin: 6px 0; }
+.hidden { display: none !important; }
+.noresult { color: var(--muted); padding: 12px 0; }
+.hl { background: color-mix(in srgb, var(--pk) 25%, transparent); border-radius: 2px; }
+article.tbl:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { display: none; }
+  .topbar { padding: 10px 16px; }
+  main { padding: 16px 16px 60px; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">ZoneCheck <small>Mô hình dữ liệu</small></div>
+  <input class="search" id="q" type="search" placeholder="Tìm bảng, cột hoặc mô tả… (ví dụ: postcode, ofsted, release_id)" autocomplete="off">
+  <div class="seg" role="group" aria-label="Chế độ sơ đồ">
+    <button type="button" data-mode="compact" aria-pressed="true">Sơ đồ rút gọn</button>
+    <button type="button" data-mode="full" aria-pressed="false">Đầy đủ cột</button>
+  </div>
+  <div class="seg" role="group" aria-label="Giao diện">
+    <button type="button" data-theme-set="auto" aria-pressed="true">Tự động</button>
+    <button type="button" data-theme-set="light" aria-pressed="false">Sáng</button>
+    <button type="button" data-theme-set="dark" aria-pressed="false">Tối</button>
+  </div>
+</div>
+<div class="layout">
+  <nav class="side" id="nav" aria-label="Mục lục"></nav>
+  <main id="main"></main>
+</div>
+
+<!-- TEMPLATE: build_erd.py thay "/*__ERD_DATA__*/null" bằng dữ liệu đọc từ schema.sql để tạo index.html. Đừng mở file này để xem sơ đồ; hãy mở index.html. -->
+<script>
+const DATA = /*__ERD_DATA__*/null;
+if (!DATA) {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.topbar .search, .topbar .seg').forEach(el => el.remove());
+    const layout = document.querySelector('.layout');
+    layout.style.display = 'block';
+    layout.innerHTML =
+      '<main style="max-width:640px;margin:48px auto;padding:0 16px">' +
+      '<h1>Đây là file template</h1>' +
+      '<p class="lede">File <code>erd_template.html</code> chỉ chứa giao diện, chưa có dữ liệu. ' +
+      'Để xem sơ đồ, hãy mở <a href="index.html"><code>erd/index.html</code></a>.</p>' +
+      '<p class="lede">Sau khi sửa <code>erd/schema.sql</code>, chạy lại lệnh sau để sinh <code>index.html</code>:</p>' +
+      '<pre class="sql">python3 erd/build_erd.py</pre></main>';
+  });
+}
+</script>
+<script type="module">
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fold = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const anchor = n => 't-' + n.replace(/[^A-Za-z0-9]+/g, '-');
+const entId = n => n.replace(/[^A-Za-z0-9]/g, '_');
+const mType = t => t.replace(/\[\]/g, '_arr').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+const T = DATA ? DATA.tables : {}, V = DATA ? DATA.views : {};
+const entToName = {};
+Object.keys(T).forEach(n => entToName[entId(n)] = n);
+
+const PRINCIPLES = [
+  ['Tách schema theo trách nhiệm', 'ops, core, mkt_uk, content, auth, app, billing: mỗi phần mở rộng độc lập, phân quyền dễ.'],
+  ['Market ≠ Locale', 'Quốc gia dữ liệu (core.market) tách khỏi ngôn ngữ giao diện (core.locale). Mọi ngôn ngữ xem được mọi quốc gia.'],
+  ['Chỉ số là dữ liệu', 'core.metric là danh mục; thêm chỉ số hay quốc gia không cần migration. Giá trị nằm ở core.metric_value.'],
+  ['Truy vết nguồn gốc', 'Mọi giá trị trỏ về ops.dataset_release: biết dữ liệu từ đâu, kỳ nào, rollback được.'],
+  ['Partition bảng lớn', 'metric_value partition theo market; crime_incident theo năm. Thêm market = thêm partition.'],
+  ['Thêm quốc gia mới', 'Tạo market + geo_level + nguồn + metric (dữ liệu), partition metric_value_<code>, schema mkt_<code> cho dữ liệu thô riêng.'],
+  ['Điểm số có phiên bản', 'core.score_model versioned: thử mô hình mới song song, tái lập điểm cũ, công bố phương pháp.'],
+  ['Sẵn sàng kiếm tiền', 'billing.* và ops.feature_flag có sẵn nhưng không bắt buộc. Giai đoạn miễn phí chỉ dùng gói free.'],
+];
+
+// ---------- Render static content ----------
+function renderNav() {
+  const nav = $('#nav');
+  let h = '<div class="grp"><a href="#overview">Tổng quan</a></div>';
+  for (const d of DATA.domains) {
+    const vs = Object.values(V).filter(v => v.domain === d.key);
+    h += `<div class="grp"><a href="#d-${d.key}">${esc(d.title)}</a><span class="n">${d.tables.length + vs.length}</span></div><ul>`;
+    h += d.tables.map(n => `<li data-nav="${esc(n)}"><a href="#${anchor(n)}">${esc(n)}</a></li>`).join('');
+    h += vs.map(v => `<li data-nav="${esc(v.name)}"><a href="#${anchor(v.name)}">${esc(v.name)}</a></li>`).join('');
+    h += '</ul>';
+  }
+  nav.innerHTML = h;
+}
+
+function colRow(t, c) {
+  const keys = (c.pk ? '<span class="k pk" title="Primary key">PK</span>' : '') +
+               (c.fk ? '<span class="k fk" title="Foreign key">FK</span>' : '') +
+               (c.uq && !c.pk ? '<span class="k uq" title="Unique">UQ</span>' : '');
+  const cons = [];
+  if (c.nn && !c.pk) cons.push('NOT NULL');
+  if (c.identity) cons.push('IDENTITY');
+  if (c.default) cons.push('DEFAULT <code>' + esc(c.default) + '</code>');
+  if (c.fk) cons.push('→ <a href="#' + anchor(c.fk.table) + '"><code>' + esc(c.fk.table) + '.' + esc(c.fk.col) + '</code></a>');
+  return `<tr><td class="cname">${keys}${esc(c.name)}</td><td class="ctype">${esc(c.type)}</td><td class="cons">${cons.join('<br>')}</td><td class="cdesc">${esc(c.comment)}</td></tr>`;
+}
+
+function tableCard(t) {
+  const incoming = [];
+  for (const o of Object.values(T)) for (const fk of o.fks) if (fk.ref === t.name) incoming.push(`<a href="#${anchor(o.name)}"><code>${esc(o.name)}</code></a> (${fk.cols.map(esc).join(', ')})`);
+  const more = [];
+  if (t.pk.length) more.push(`<h4>Khoá chính</h4><ul><li><code>(${t.pk.map(esc).join(', ')})</code></li></ul>`);
+  if (t.uniques.length) more.push(`<h4>Ràng buộc UNIQUE</h4><ul>${t.uniques.map(u => `<li><code>(${u.map(esc).join(', ')})</code></li>`).join('')}</ul>`);
+  if (t.indexes.length) more.push(`<h4>Index</h4><ul>${t.indexes.map(i => `<li><code>${esc(i.name)}</code>: ${i.unique ? 'UNIQUE ' : ''}${esc(i.method)} <code>(${esc(i.expr)})</code>${i.where ? ' WHERE <code>' + esc(i.where) + '</code>' : ''}</li>`).join('')}</ul>`);
+  if (t.partition_by) more.push(`<h4>Partition</h4><ul><li>PARTITION BY <code>${esc(t.partition_by)}</code></li>${t.partitions.map(p => `<li><code>${esc(p.name)}</code>: ${esc(p.bound)}</li>`).join('')}</ul>`);
+  if (incoming.length) more.push(`<h4>Được tham chiếu bởi (${incoming.length})</h4><ul>${incoming.map(x => `<li>${x}</li>`).join('')}</ul>`);
+  const [sch, ...rest] = t.name.split('.');
+  const badges = [`<span class="badge">${t.columns.length} cột</span>`];
+  if (t.partition_by) badges.push('<span class="badge">partitioned</span>');
+  if (t.fks.length) badges.push(`<span class="badge">${t.fks.length} FK</span>`);
+  return `<article class="tbl" id="${anchor(t.name)}" data-name="${esc(t.name)}">
+    <header><h3><span class="sch">${esc(sch)}.</span>${esc(rest.join('.'))}</h3>${badges.join('')}</header>
+    <p class="comment">${esc(t.comment)}</p>
+    <div class="colwrap"><table class="cols"><thead><tr><th>Cột</th><th>Kiểu</th><th>Ràng buộc</th><th>Mô tả</th></tr></thead>
+    <tbody>${t.columns.map(c => colRow(t, c)).join('')}</tbody></table></div>
+    ${more.length ? `<details class="more"><summary>Khoá, index, partition, tham chiếu</summary>${more.join('')}</details>` : ''}
+  </article>`;
+}
+
+function viewCard(v) {
+  const [sch, ...rest] = v.name.split('.');
+  return `<article class="tbl" id="${anchor(v.name)}" data-name="${esc(v.name)}">
+    <header><h3><span class="sch">${esc(sch)}.</span>${esc(rest.join('.'))}</h3><span class="badge view">materialized view</span></header>
+    <p class="comment">${esc(v.comment)}</p>
+    <details class="more" open><summary>Định nghĩa</summary><pre class="sql">${esc(v.sql)}</pre>
+    ${v.indexes.length ? `<h4>Index</h4><ul>${v.indexes.map(i => `<li><code>${esc(i.name)}</code>: ${i.unique ? 'UNIQUE ' : ''}<code>(${esc(i.expr)})</code></li>`).join('')}</ul>` : ''}</details>
+  </article>`;
+}
+
+function diagramBox(id, label) {
+  return `<div class="diagram" data-diagram="${id}">
+    <div class="tools"><button type="button" data-z="-" title="Thu nhỏ" aria-label="Thu nhỏ">−</button><button type="button" data-z="fit" class="wide" title="Vừa khung">Vừa khung</button><button type="button" data-z="+" title="Phóng to" aria-label="Phóng to">+</button></div>
+    <div class="canvas" role="img" aria-label="${esc(label)}"><div class="msg">Đang vẽ sơ đồ…</div></div></div>`;
+}
+
+function renderMain() {
+  const s = DATA.stats;
+  const schemaCounts = {};
+  Object.values(T).forEach(t => schemaCounts[t.schema] = (schemaCounts[t.schema] || 0) + 1);
+  let h = `<section id="overview">
+    <h1>Mô hình dữ liệu ZoneCheck</h1>
+    <p class="lede">PostgreSQL 16+ với PostGIS. Thiết kế đa quốc gia, đa ngôn ngữ, bắt đầu với market UK. Trang này được sinh tự động từ <code>erd/schema.sql</code> bằng <code>python3 erd/build_erd.py</code>: sửa SQL rồi chạy lại để cập nhật.</p>
+    <div class="stats">
+      <div class="stat"><b>${s.tables}</b><span>bảng</span></div>
+      <div class="stat"><b>${s.columns}</b><span>cột (100% có mô tả)</span></div>
+      <div class="stat"><b>${s.fks}</b><span>khoá ngoại</span></div>
+      <div class="stat"><b>${s.indexes}</b><span>index</span></div>
+      <div class="stat"><b>${s.partitions}</b><span>partition</span></div>
+      <div class="stat"><b>${DATA.domains.length}</b><span>nhóm</span></div>
+    </div>
+    <h2>Nguyên tắc thiết kế</h2>
+    <ul class="principles">${PRINCIPLES.map(([a, b]) => `<li><b>${esc(a)}</b><span>${esc(b)}</span></li>`).join('')}</ul>
+    <h2>Quan hệ giữa các nhóm</h2>
+    <p class="lede">Mũi tên đi từ nhóm chứa khoá ngoại tới nhóm được tham chiếu. Số trên mũi tên là số khoá ngoại.</p>
+    ${diagramBox('overview', 'Sơ đồ quan hệ giữa các nhóm bảng')}
+    <h2>Schema</h2>
+    <table class="plain"><thead><tr><th>Schema</th><th>Bảng</th><th>Vai trò</th></tr></thead><tbody>
+    ${Object.entries(DATA.schemas).map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${schemaCounts[k] || 0}</td><td>${esc(v)}</td></tr>`).join('')}
+    </tbody></table>
+  </section>`;
+  for (const d of DATA.domains) {
+    const vs = Object.values(V).filter(v => v.domain === d.key);
+    h += `<section class="domain" id="d-${d.key}" data-domain="${d.key}">
+      <h2>${esc(d.title)}</h2><p class="lede">${esc(d.desc)}</p>
+      ${diagramBox(d.key, 'Sơ đồ ERD nhóm ' + d.title)}
+      <div class="legend"><span><span class="k pk">PK</span>khoá chính</span><span><span class="k fk">FK</span>khoá ngoại</span><span><span class="k uq">UK</span>unique</span><span>Bảng thuộc nhóm khác chỉ hiện cột khoá. Bấm vào bảng trên sơ đồ để tới phần mô tả.</span></div>
+      <div class="cards">${d.tables.map(n => tableCard(T[n])).join('')}${vs.map(viewCard).join('')}</div>
+      <p class="noresult hidden">Không có bảng nào khớp từ khoá trong nhóm này.</p>
+    </section>`;
+  }
+  $('#main').innerHTML = h;
+}
+
+// ---------- Mermaid code ----------
+function erCode(domain, mode) {
+  const own = new Set(domain.tables);
+  const ext = new Set();
+  const rels = [];
+  for (const n of domain.tables) {
+    const t = T[n];
+    for (const fk of t.fks) {
+      rels.push({ parent: fk.ref, child: n, fk });
+      if (!own.has(fk.ref)) ext.add(fk.ref);
+    }
+  }
+  const out = ['erDiagram'];
+  const attrs = (t, onlyKeys) => {
+    let cols = t.columns;
+    if (onlyKeys) cols = cols.filter(c => c.pk || c.fk);
+    if (!cols.length) cols = t.columns.slice(0, 1);
+    return cols.map(c => {
+      const k = [c.pk && 'PK', c.fk && 'FK', c.uq && !c.pk && 'UK'].filter(Boolean).join(', ');
+      return `    ${mType(c.type) || 'col'} ${c.name}${k ? ' ' + k : ''}`;
+    });
+  };
+  for (const n of domain.tables) out.push(`  ${entId(n)}["${n}"] {`, ...attrs(T[n], mode === 'compact'), '  }');
+  for (const n of ext) out.push(`  ${entId(n)}["${n}"] {`, ...attrs({ columns: T[n].columns.filter(c => c.pk) }, false), '  }');
+  for (const r of rels) {
+    const t = T[r.child];
+    const nn = r.fk.cols.every(cn => (t.columns.find(c => c.name === cn) || {}).nn);
+    const one = (r.fk.cols.length === t.pk.length && r.fk.cols.every(c => t.pk.includes(c))) ||
+                (r.fk.cols.length === 1 && t.uniques.some(u => u.length === 1 && u[0] === r.fk.cols[0])) ||
+                (r.fk.cols.length === 1 && (t.columns.find(c => c.name === r.fk.cols[0]) || {}).uq);
+    out.push(`  ${entId(r.parent)} ${nn ? '||' : '|o'}--${one ? 'o|' : 'o{'} ${entId(r.child)} : "${r.fk.cols.join(', ')}"`);
+  }
+  return out.join('\n');
+}
+
+function overviewCode() {
+  const dom = {};
+  DATA.domains.forEach(d => d.tables.forEach(n => dom[n] = d.key));
+  const edges = {};
+  for (const t of Object.values(T)) for (const fk of t.fks) {
+    const a = dom[t.name], b = dom[fk.ref];
+    if (a && b && a !== b) edges[a + '>' + b] = (edges[a + '>' + b] || 0) + 1;
+  }
+  const out = ['flowchart LR'];
+  for (const d of DATA.domains) out.push(`  ${d.key}["<b>${d.title}</b><br/>${d.tables.length} bảng"]`);
+  for (const [k, n] of Object.entries(edges)) { const [a, b] = k.split('>'); out.push(`  ${a} -->|${n}| ${b}`); }
+  for (const d of DATA.domains) out.push(`  click ${d.key} href "#d-${d.key}"`);
+  return out.join('\n');
+}
+
+// ---------- Mermaid rendering ----------
+let mermaid = null;
+let mode = 'compact';
+let seq = 0;
+const zoom = {};
+
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+async function loadMermaid() {
+  try {
+    const m = await import('https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs');
+    mermaid = m.default;
+    return true;
+  } catch (e) {
+    document.querySelectorAll('.diagram .canvas').forEach(c => c.innerHTML = '<div class="msg">Không tải được thư viện vẽ sơ đồ (cần Internet để tải Mermaid từ CDN). Phần mô tả bảng bên dưới vẫn dùng được.</div>');
+    return false;
+  }
+}
+
+function initMermaid() {
+  mermaid.initialize({
+    startOnLoad: false, securityLevel: 'loose', maxTextSize: 500000, maxEdges: 2000,
+    theme: isDark() ? 'dark' : 'neutral',
+    er: { useMaxWidth: false, layoutDirection: 'LR' },
+    flowchart: { useMaxWidth: false, htmlLabels: true },
+    themeVariables: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '13px' },
+  });
+}
+
+function applyZoom(box) {
+  const svg = $('svg', box);
+  if (!svg) return;
+  const key = box.dataset.diagram;
+  const vb = svg.viewBox.baseVal;
+  const w = vb && vb.width ? vb.width : svg.getBBox().width;
+  if (zoom[key] == null) zoom[key] = Math.min(1, ($('.canvas', box).clientWidth - 32) / w);
+  svg.style.width = Math.max(120, w * zoom[key]) + 'px';
+}
+
+async function renderBox(box) {
+  if (!mermaid || box.dataset.rendered === mode + (isDark() ? 'd' : 'l')) return;
+  const key = box.dataset.diagram;
+  const code = key === 'overview' ? overviewCode() : erCode(DATA.domains.find(d => d.key === key), mode);
+  const canvas = $('.canvas', box);
+  try {
+    const { svg, bindFunctions } = await mermaid.render('mm' + (++seq), code);
+    canvas.innerHTML = svg;
+    if (bindFunctions) bindFunctions(canvas);
+    box.dataset.rendered = mode + (isDark() ? 'd' : 'l');
+    applyZoom(box);
+    canvas.querySelectorAll('[id^="entity-"]').forEach(g => {
+      const m = g.id.match(/^entity-(.+)-\d+$/);
+      const name = m && entToName[m[1]];
+      if (name) g.addEventListener('click', () => { location.hash = anchor(name); });
+    });
+  } catch (e) {
+    canvas.innerHTML = '<div class="msg">Lỗi vẽ sơ đồ: ' + esc(e.message || e) + '</div>';
+  }
+}
+
+const io = new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) renderBox(e.target);
+}, { rootMargin: '400px 0px' });
+
+function rerenderVisible() {
+  document.querySelectorAll('.diagram').forEach(b => { b.dataset.rendered = ''; io.unobserve(b); io.observe(b); });
+}
+
+// ---------- Interactions ----------
+function wire() {
+  document.addEventListener('click', e => {
+    const z = e.target.closest('[data-z]');
+    if (z) {
+      const box = z.closest('.diagram'), key = box.dataset.diagram;
+      const svg = $('svg', box);
+      if (!svg) return;
+      if (z.dataset.z === 'fit') zoom[key] = ($('.canvas', box).clientWidth - 32) / svg.viewBox.baseVal.width;
+      else zoom[key] = Math.min(4, Math.max(0.15, (zoom[key] || 1) * (z.dataset.z === '+' ? 1.25 : 0.8)));
+      applyZoom(box);
+      return;
+    }
+    const m = e.target.closest('[data-mode]');
+    if (m) {
+      mode = m.dataset.mode;
+      document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === m)));
+      Object.keys(zoom).forEach(k => delete zoom[k]);
+      rerenderVisible();
+      return;
+    }
+    const th = e.target.closest('[data-theme-set]');
+    if (th) {
+      const v = th.dataset.themeSet;
+      if (v === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
+      try { localStorage.setItem('zc-erd-theme', v); } catch (_) {}
+      document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', String(b === th)));
+      if (mermaid) { initMermaid(); rerenderVisible(); }
+    }
+  });
+
+  const cards = [...document.querySelectorAll('article.tbl')].map(el => {
+    const n = el.dataset.name;
+    const t = T[n] || V[n];
+    const hay = fold([n, t.comment, ...(t.columns || []).flatMap(c => [c.name, c.type, c.comment])].join(' '));
+    return { el, n, hay };
+  });
+  $('#q').addEventListener('input', e => {
+    const q = fold(e.target.value.trim());
+    for (const c of cards) c.el.classList.toggle('hidden', !!q && !c.hay.includes(q));
+    document.querySelectorAll('section.domain').forEach(sec => {
+      const any = sec.querySelector('article.tbl:not(.hidden)');
+      sec.querySelector('.noresult').classList.toggle('hidden', !!any || !q);
+    });
+    document.querySelectorAll('[data-nav]').forEach(li => {
+      const c = cards.find(x => x.n === li.dataset.nav);
+      li.classList.toggle('hidden', !!q && c && c.el.classList.contains('hidden'));
+    });
+  });
+}
+
+function restoreTheme() {
+  let v = 'auto';
+  try { v = localStorage.getItem('zc-erd-theme') || 'auto'; } catch (_) {}
+  if (v !== 'auto') document.documentElement.dataset.theme = v;
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeSet === v)));
+}
+
+if (DATA) {
+  renderNav();
+  renderMain();
+  restoreTheme();
+  wire();
+  if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView(); }
+  if (await loadMermaid()) {
+    initMermaid();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!document.documentElement.dataset.theme) { initMermaid(); rerenderVisible(); } });
+    document.querySelectorAll('.diagram').forEach(b => io.observe(b));
+  }
+}
+</script>
+</body>
+</html>

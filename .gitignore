@@ -1,0 +1,10 @@
+auth_key/
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+get-data/**/data/
+get-data/logs/
+get-data/.env
+get-data/uk/manual/*/*
+!get-data/uk/manual/README.md
