@@ -17,7 +17,11 @@ export interface CrimeCounts {
   prev12: Record<string, number>;
   /** 3-month windows ending at the latest month, oldest first: crimes excl. ASB */
   quarters: { end: string; n: number }[];
+  /** crime type → weighted incidents in the last 1, 3 and 6 months (12 months is last12) */
+  windows: { m1: Record<string, number>; m3: Record<string, number>; m6: Record<string, number> };
 }
+
+export interface WardCrime { name: string; slug: string; rate: number; p: number | null }
 
 export interface CrimeDetail {
   /** latest month in the data (YYYY-MM-01) */
@@ -79,8 +83,12 @@ async function countsFor(areaId: number, last: string): Promise<CrimeCounts | nu
   const last12: Record<string, number> = {};
   const prev12: Record<string, number> = {};
   const q = new Array(12).fill(0) as number[];
+  const windows: CrimeCounts["windows"] = { m1: {}, m3: {}, m6: {} };
   for (const r of rows as Row[]) {
     const ago = monthsAgo(r.month);
+    if (ago < 1) windows.m1[r.t] = (windows.m1[r.t] ?? 0) + r.n;
+    if (ago < 3) windows.m3[r.t] = (windows.m3[r.t] ?? 0) + r.n;
+    if (ago < 6) windows.m6[r.t] = (windows.m6[r.t] ?? 0) + r.n;
     if (ago < 12) last12[r.t] = (last12[r.t] ?? 0) + r.n;
     else if (ago < 24) prev12[r.t] = (prev12[r.t] ?? 0) + r.n;
     if (r.t !== "Anti-social behaviour" && ago < 36) q[11 - Math.floor(ago / 3)] += r.n;
@@ -91,7 +99,7 @@ async function countsFor(areaId: number, last: string): Promise<CrimeCounts | nu
     const d = new Date(Date.UTC(ly, lm - 1 - back, 1));
     return { end: d.toISOString().slice(0, 10), n };
   });
-  return { pop: p.pop, last12, prev12, quarters };
+  return { pop: p.pop, last12, prev12, quarters, windows };
 }
 
 async function placesAndOutcomes(areaId: number, last: string) {
@@ -135,5 +143,69 @@ export async function getCrimeDetail(areaId: number, ladId: number | null, near?
     const [ly, lm] = last.split("-").map(Number);
     const first = new Date(Date.UTC(ly, lm - 12, 1)).toISOString().slice(0, 10);
     return { last, first, area, lad, ...po, near: nc && { radius: NEAR_M, counts: nc } };
+  }, 8);
+}
+
+/** Wards of a local authority by crime rate (uk.crime.total_rate, 12 months), highest first. */
+export async function getWardCrime(ladId: number): Promise<WardCrime[]> {
+  "use cache";
+  cacheLife("days");
+  cacheTag(`market:${M}`, `crime-wards:${ladId}`);
+  return scoped(async () => {
+    try {
+      const rows = await sql`
+        select w.name, w.slug, v.value_num as rate, v.percentile::float8 as p
+        from core.geo_area_link k
+        join core.geo_area w on w.id = k.child_id and w.level_code = 'ward' and w.is_active
+        join lateral (select value_num, percentile from core.metric_value
+                      where market_code = ${M} and area_id = w.id and metric_id = 'uk.crime.total_rate' and not is_suppressed
+                      order by period desc limit 1) v on true
+        where k.parent_id = ${ladId} and k.relation = 'within'
+        order by v.value_num desc`;
+      return rows.map((r: Row) => ({ name: r.name, slug: r.slug, rate: r.rate, p: r.p }));
+    } catch (e) {
+      console.error("[crime] wards failed:", e instanceof Error ? e.message : e);
+      cacheLife("minutes");
+      return [];
+    }
+  });
+}
+
+export interface CrimeHistory {
+  /** series name → yearly rate per 1,000 residents (crimes excl. anti-social behaviour), complete years only */
+  series: { label: string; points: { year: number; rate: number }[] }[];
+  /** high-harm types for the area itself, from 2014 (police categories changed in 2013) */
+  types: { label: string; points: { year: number; rate: number }[] }[];
+}
+
+// precomputed by the ETL step crime_history (mkt_uk.crime_area_year): k → label
+const HIGH_HARM: [string, string][] = [["vso", "Violence and sexual offences"], ["robbery", "Robbery"], ["weapons", "Possession of weapons"]];
+
+async function yearly(areaIds: number[]): Promise<Row[]> {
+  return sql`select area_id::int, year::int, k, rate::float8 from mkt_uk.crime_area_year
+             where area_id = any(${areaIds}::bigint[]) order by year`;
+}
+
+export async function getCrimeHistory(areaId: number, lad: { id: number; name: string } | null, region: { id: number; name: string } | null, label: string): Promise<CrimeHistory | null> {
+  "use cache";
+  cacheLife("days");
+  cacheTag(`market:${M}`, `crime-history:${areaId}`);
+  return scoped(async () => {
+    try {
+      const ids = [areaId, lad && lad.id !== areaId ? lad.id : null, region && region.id !== areaId ? region.id : null].filter((x): x is number => x != null);
+      const rows = await yearly(ids);
+      const pts = (id: number, k: string) => rows.filter((r: Row) => r.area_id === id && r.k === k).map((r: Row) => ({ year: r.year, rate: r.rate }));
+      const here = pts(areaId, "total");
+      if (here.length < 3) return null;
+      const series = [{ label, points: here }];
+      if (lad && lad.id !== areaId && pts(lad.id, "total").length) series.push({ label: lad.name, points: pts(lad.id, "total") });
+      if (region && region.id !== areaId && pts(region.id, "total").length) series.push({ label: region.name, points: pts(region.id, "total") });
+      const t = Object.fromEntries(HIGH_HARM.map(([k]) => [k, pts(areaId, k)]));
+      return { series, types: HIGH_HARM.filter(([k]) => t[k].length > 2).map(([k, label]) => ({ label, points: t[k] })) };
+    } catch (e) {
+      console.error("[crime] history failed:", e instanceof Error ? e.message : e);
+      cacheLife("minutes");
+      return null;
+    }
   }, 8);
 }

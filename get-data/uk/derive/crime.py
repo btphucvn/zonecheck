@@ -42,7 +42,7 @@ TYPES = {
 }
 GROUPS.update({k: f"crime_type = '{t}'" for k, (t, _) in TYPES.items()})
 SINGLE = ("burglary", "vehicle", "damage", *TYPES)  # các loại cộng lại = total (không ASB)
-LEVELS = ("msoa", "lad", "region", "nation", "sector", "district", "postal_area", "town")
+LEVELS = ("msoa", "lad", "region", "nation", "sector", "district", "postal_area", "town", "ward")
 
 
 class Crime(Step):
@@ -162,12 +162,25 @@ class Crime(Step):
                             value_type="rate", unit="per 1,000 residents", decimals=1, direction=-1,
                             period_type="rolling_12m", native_level="lsoa", aggregation="weighted_mean",
                             scope="uk.ew", name=f"{label} rate per 1,000 residents (12 months)", scorable=scorable)
+        register_metric(ctx, "uk.crime.burglary_dw_rate", category="safety", dataset="uk.police.street_crime",
+                        value_type="rate", unit="per 1,000 dwellings", decimals=1, direction=-1,
+                        period_type="rolling_12m", native_level="lsoa", aggregation="weighted_mean", scope="uk.ew",
+                        name="Burglary rate per 1,000 dwellings (12 months)", scorable=False,
+                        description="Burglaries in the last 12 months per 1,000 dwellings (VOA council tax stock)")
         register_metric(ctx, "uk.crime.total_change_pct", category="safety", dataset="uk.police.street_crime",
                         value_type="percent", unit="%", decimals=0, direction=-1, period_type="rolling_12m",
                         native_level="lsoa", scope="uk.ew", name="Change in crime vs previous 12 months",
                         scorable=False)
 
-        metric_ids = [f"uk.crime.{k}_{s}" for k in GROUPS for s in ("12m", "rate")] + ["uk.crime.total_change_pct"]
+        metric_ids = [f"uk.crime.{k}_{s}" for k in GROUPS for s in ("12m", "rate")] + ["uk.crime.total_change_pct",
+                                                                                     "uk.crime.burglary_dw_rate"]
+        # số nhà (VOA council tax stock, kỳ mới nhất) làm mẫu số cho burglary, như chuẩn "per 1,000 at-risk properties"
+        ctx.sql("số nhà theo khu", """
+            CREATE TEMP TABLE area_dw ON COMMIT DROP AS
+            SELECT DISTINCT ON (v.area_id) v.area_id, v.value_num AS dwellings
+            FROM core.metric_value v WHERE v.market_code='uk' AND v.metric_id = 'uk.ctax.stock' AND v.value_num > 0
+            ORDER BY v.area_id, v.period DESC""")
+        ctx.conn.execute("CREATE INDEX ON area_dw (area_id)")
         ctx.sql("xoá giá trị kỳ này", "DELETE FROM core.metric_value WHERE market_code='uk' AND metric_id = ANY(%s) AND period = %s",
                 (metric_ids, last))
         rows = []
@@ -175,6 +188,9 @@ class Crime(Step):
             rows.append(f"('uk.crime.{k}_12m', c.{k}, c.pop_covered < 0.95 * c.population)")
             rows.append(f"('uk.crime.{k}_rate', CASE WHEN c.pop_covered >= 50 THEN c.{k} * 1000.0 / c.pop_covered END, "
                         f"c.pop_covered < 0.5 * c.population)")
+        rows.append("('uk.crime.burglary_dw_rate', CASE WHEN d.dwellings >= 20 AND c.pop_covered >= 50 "
+                    "THEN c.burglary * 1000.0 / (d.dwellings * c.pop_covered / c.population) END, "
+                    "c.pop_covered < 0.5 * c.population)")
         rows.append("('uk.crime.total_change_pct', CASE WHEN c.total_prev >= 20 THEN (c.total - c.total_prev) * 100.0 / c.total_prev END, "
                     "c.pop_covered < 0.5 * c.population)")
         n = ctx.sql("ghi metric_value tội phạm", f"""
@@ -184,7 +200,8 @@ class Crime(Step):
                    CASE WHEN c.pop_covered < c.population AND NOT m.supp
                         THEN jsonb_build_object('population_coverage', round((c.pop_covered / nullif(c.population, 0))::numeric, 3)) END,
                    c.total::int, m.supp, CASE WHEN m.supp THEN 'source_suppressed' END
-            FROM area_crime c CROSS JOIN LATERAL (VALUES {", ".join(rows)}) m(metric_id, v, supp)""", (last,))
+            FROM area_crime c LEFT JOIN area_dw d ON d.area_id = c.area_id
+            CROSS JOIN LATERAL (VALUES {", ".join(rows)}) m(metric_id, v, supp)""", (last,))
 
         # ---- kiểm tra hợp lý
         ew = ctx.conn.execute("""SELECT a.code, v.value_num FROM core.metric_value v JOIN core.geo_area a ON a.id = v.area_id
@@ -204,4 +221,9 @@ class Crime(Step):
         log.info("    London %.1f vs South West %.1f / 1.000 dân", london or 0, sw or 0)
         if not (london and sw and london > sw):
             raise LoadError(f"Kiểm tra định hướng thất bại: London ({london}) không cao hơn South West ({sw})")
+        bw = ctx.scalar("""SELECT v.value_num FROM core.metric_value v JOIN core.geo_area a ON a.id = v.area_id
+            WHERE v.metric_id='uk.crime.burglary_dw_rate' AND v.period=%s AND a.code='E92000001'""", (last,))
+        log.info("    burglary England: %.1f / 1.000 nhà", bw or 0)
+        if bw is None or not 3 <= bw <= 20:  # ~200 nghìn vụ / ~25 triệu nhà ≈ 8
+            raise LoadError(f"Burglary / 1.000 nhà England bất thường: {bw}")
         return {"period_end": str(last), "values": n, "lsoa_suppressed": gaps, "incidents_12m": n12}

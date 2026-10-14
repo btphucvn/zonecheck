@@ -29,6 +29,7 @@ export function Header({ t }: { t: Dict }) {
         <nav className="nav-main" aria-label="Main">
           <Link href="/uk/where-to-live" className="hide-sm">{t.nav.where}</Link>
           <Link href="/uk/rankings" className="hide-sm">{t.nav.rankings}</Link>
+          <Link href="/uk/valuation" className="hide-sm">{t.nav.valuation}</Link>
           <Link href="/uk/tools" className="hide-sm">{t.nav.calculators}</Link>
           <CompareNavLink label={t.nav.compare} />
         </nav>

@@ -4,13 +4,13 @@ import { scoped, sql } from "@/lib/db";
 import { parseUkQuery, postalSlug, uk } from "@/markets/uk";
 
 export interface SearchHit {
-  kind: "postcode" | "sector" | "district" | "town" | "area" | "region" | "school" | "station" | "street";
+  kind: "postcode" | "sector" | "district" | "town" | "ward" | "area" | "region" | "school" | "station" | "street";
   label: string;
   detail: string;
   href: string;
 }
 
-const LEVEL_KIND: Record<string, SearchHit["kind"]> = { town: "town", lad: "area", region: "region", district: "district" };
+const LEVEL_KIND: Record<string, SearchHit["kind"]> = { town: "town", ward: "ward", lad: "area", region: "region", district: "district" };
 
 /** "CHOUMERT ROAD" → "Choumert Road", "ST. JOHN'S HILL" → "St. John's Hill". */
 function titleCase(s: string): string {
@@ -122,9 +122,11 @@ export async function search(q: string, limit = 8): Promise<SearchHit[]> {
     const norm = query.toLowerCase();
     const [places, pois, streets] = await Promise.all([
       sql`
-        select level_code, code, slug, name, display_name, population, similarity(core.normalize_text(name), core.normalize_text(${norm})) as sim
-        from core.geo_area
-        where market_code = 'uk' and level_code in ('town', 'lad', 'region') and is_active
+        select level_code, code, slug, name, display_name, population, similarity(core.normalize_text(name), core.normalize_text(${norm})) as sim,
+               case when level_code = 'ward' then (select l.name from core.geo_area l where l.market_code = 'uk' and l.level_code = 'lad'
+                                                   and l.code = g.attrs->>'lad_code') end as lad_name
+        from core.geo_area g
+        where market_code = 'uk' and level_code in ('town', 'ward', 'lad', 'region') and is_active
           and core.normalize_text(name) % core.normalize_text(${norm})
         order by (core.normalize_text(name) = core.normalize_text(${norm})) desc,
                  (core.normalize_text(name) like core.normalize_text(${norm}) || '%') desc,
@@ -142,7 +144,7 @@ export async function search(q: string, limit = 8): Promise<SearchHit[]> {
 
     const placeHits = places.map((p) => {
       const kind = LEVEL_KIND[p.level_code];
-      const detail = p.level_code === "lad" ? "Local authority" : p.level_code === "region" ? "Region" : (p.display_name && p.display_name !== p.name ? p.display_name.replace(`${p.name}, `, "") : "Town or place");
+      const detail = p.level_code === "lad" ? "Local authority" : p.level_code === "region" ? "Region" : p.level_code === "ward" ? `Ward${p.lad_name ? `, ${p.lad_name}` : ""}` : (p.display_name && p.display_name !== p.name ? p.display_name.replace(`${p.name}, `, "") : "Town or place");
       return { hit: { kind, label: p.name, detail, href: `/uk/${uk.segmentForLevel(p.level_code)}/${p.slug}` } as SearchHit, strong: String(p.name).toLowerCase().startsWith(norm) };
     });
     const streetHits: SearchHit[] = streets.map((r) => ({

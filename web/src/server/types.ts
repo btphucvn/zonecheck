@@ -140,6 +140,8 @@ export interface AreaReport {
   boundaryApprox: boolean;
   metrics: MetricMap;
   ladMetrics: MetricMap;
+  /** region (London, South East…) for "average for the region" comparisons */
+  regionMetrics: MetricMap;
   nationMetrics: MetricMap;
   categories: CategoryScore[];
   scoreSource: "db" | "computed" | "none";

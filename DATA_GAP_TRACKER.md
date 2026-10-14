@@ -55,7 +55,42 @@ Trạng thái: ⏳ chưa làm · 🔧 đang làm · ✅ xong · ⚠️ lỗi/vư
 | 39 | Khu bắt buộc cấp phép cho thuê / HMO | PostcodeCheck, PropertyData | Từng LA | — | ➖ | ➖ | Không có dataset quốc gia |
 | 40 | Giá chào bán / tin đăng | PropertyData | Portal | — | ➖ | ➖ | Scrape vi phạm điều khoản |
 
+### Đợt khảo sát CrystalRoof 2026-10-14 (chi tiết: COMPETITOR_CRYSTALROOF.md)
+
+| # | Dữ liệu | Đối thủ có | Nguồn | Tool | Tải | Nạp DB | Ghi chú |
+|---|---|---|---|---|---|---|---|
+| 41–44 | Học sinh: giới, EAL, FSM, dân tộc HS, sĩ số theo khối, SEN, vắng học, sĩ số lớp | CrystalRoof | DfE SPC (EES, file cấp trường) + Compare School Performance (census, absence) | `dfe_spc`, `dfe_school_profile` | ✅ | ✅ | 24.428 trường, `uk.pupils.*`, `uk.school.class_size_*`; TB LA/England → `mkt_uk.school_benchmark` |
+| 45–46 | % entering EBacc, Best 3, AAB, TB LA/England mọi chỉ số thi; thêm trường đặc biệt/độc lập/consortium 16+ | CrystalRoof | Performance tables (RECTYPE 1/2/3; LA = 3/4, England trường công = 5/7) | `dfe_performance` | ✅ | ✅ | 402.694 giá trị, 8.839 dòng TB; khoảng progress nới [-30, 30] cho trường đặc biệt |
+| 47 | Số bài thi KS4 theo môn + phân bố điểm | CrystalRoof | KS4 underlying entries & grades (xlsx) | `dfe_school_profile` | ✅ | ✅ | 4.862 trường → `uk.ks4.subject_entries` |
+| 48 | Destinations KS4 / 16-18 / HE (top third) | CrystalRoof | Compare School Performance destinations | `dfe_school_profile` | ✅ | ✅ | `uk.dest.ks4`, `uk.dest.ks5`, `uk.dest.ks5_he` + TB LA/England |
+| 49 | Tuyển sinh: đơn và offer nguyện vọng 1/2/3, từ LA khác | CrystalRoof | DfE applications & offers (cùng file) | `dfe_school_offers` | ✅ | ✅ | 3,19 triệu giá trị, kiểm tra offer ≤ đơn |
+| 50 | 6 sub-domain IoD2025 | CrystalRoof | IoD2025 File 7 | `iod2025` | ✅ | ✅ | `uk.iod25.sub_*` + rollup |
+| 51 | Output Area Classification 2021/22 + tên, mô tả | CrystalRoof | GeoDS/ONS (GitHub repo chính thức + API tra cứu GeoDS), OGL | `geods_oac` | ✅ | ✅ | 188.880 OA E&W khớp 100%, 21 group + 8 supergroup có mô tả → `mkt_uk.oac`, `mkt_uk.oac_label` |
+| 52 | London OAC | CrystalRoof | CDRC | — | ➖ | ➖ | Dùng OAC UK 2021/22 thay (mới hơn, cùng nhà phát triển) |
+| 53 | Lịch sử tội phạm 12/2010 → nay theo LSOA × năm × loại | CrystalRoof | data.police.uk archive 2013-11, 2016-11, 2019-11, 2022-11, 2023-08 + crime_incident | `police_history` + derive `crime_history` | ✅ | ✅ | 6,04 triệu dòng LSOA × năm × loại; độ phủ theo lực lượng (Police Force Area), GMP thiếu từ 07/2019 bị loại đúng; `mkt_uk.crime_area_year` 3,56 triệu dòng (2011–2025, mọi cấp) |
+| 54 | Burglary / 1.000 nhà | CrystalRoof | VOA dwelling stock (`uk.ctax.stock`) | derive `crime` | ✅ | ✅ | `uk.crime.burglary_dw_rate`, England 8,1 |
+| 55–60 | Census bổ sung (18 bảng: hôn nhân, hộ chiếu, giới, sống chung, năm đến UK, di cư, ngôn ngữ hộ, bản sắc, đa tôn giáo hộ, khuyết tật hộ, số phòng, mật độ ở, giờ làm, ngành, lịch sử việc làm, HS/SV) | CrystalRoof API | Nomis bulk | `census2021_more` | ✅ | ✅ | 18 bảng, rollup 1,77 triệu giá trị. Nhóm di cư/ngôn ngữ/bản sắc = sensitive, không tính điểm. File rỗng của Nomis (ts010 LSOA) được bỏ qua |
+| 61 | Xu hướng tính dục, bản dạng giới | CrystalRoof API | Nomis | — | ➖ | ➖ | Không đưa lên trang |
+| — | Tỷ lệ % từ Census (NS-SeC 5 lớp, 7 bậc học vấn, tenure, tuổi 20 năm, 7 loại hộ, 16 dân tộc, 9 tôn giáo) | CrystalRoof | derive từ bảng Census đã có | derive `census_shares` | ✅ | ✅ | 54 chỉ số `uk.share.*` (4,71 triệu giá trị) ở mọi cấp ≥ LSOA, có phân vị; England khớp ONS (bằng cấp 33,9%, White British 73,5%, sở hữu 62,3%, xã hội 17,1%) |
+| — | Cấp ward (7.596 ward E&W, ranh giới 05/2026 khớp ONSPD 100%) | CrystalRoof | ONS Wards BGC | `boundaries_ward` + derive | ✅ | ✅ | membership, housing, crime, rollup, phân vị, điểm đã chạy lại cho ward |
+| 62 | Đường lớn gần nhất (Motorway/A/B) | CrystalRoof API | OS Open Roads | `os_open_roads` | ✅ | ✅ | 463.035 đoạn Motorway/A/B, motorway 3.761 km (không tính slip road) → `mkt_uk.road` |
+| 63 | Chuông nhà thờ | CrystalRoof | Dove's Guide | — | ➖ | ➖ | Chưa rõ giấy phép dùng thương mại; chưa làm |
+| 64 | Trạm cứu thương, bệnh viện / A&E | CrystalRoof | OSM (`emergency=ambulance_station`, `amenity=hospital` + `emergency=yes`) | `osm_uk` | ✅ | ✅ | 43.974 POI OSM; nguồn ồn trong 483 m |
+| 65 | % diện tích ward bị ồn | CrystalRoof | — | — | ➖ | ➖ | Ta dùng % dân (chính xác hơn với người ở), đã có |
+| 66 | PTAL lưới 100 m tại địa chỉ | CrystalRoof | London Datastore (PTAL 2015) | `london_ptal` | ✅ | ✅ | 159.451 ô `mkt_uk.ptal_grid`; ô gần Bank = 6b |
+| 67 | Hãng quản lý ga, điểm đi/đến chính | CrystalRoof | ORR Table 1410 | `orr_station_usage` | ✅ | ✅ | 2.575/2.589 ga, 30 hãng quản lý; attrs `operator`, `main_destination` |
+| 68 | London: NO2/NOx/PM10/PM2.5 lưới 20 m + số ngày PM10 vượt ngưỡng | CrystalRoof | LAEI 2022 (GLA) | `laei` | ✅ | ✅ | 205.002 postcode → `mkt_uk.postcode_air`; NO2 TB trung tâm 27,9 vs rìa 17,8 µg/m³ |
+| 69 | Tốc độ broadband theo postcode | CrystalRoof API | Ofcom | — | ➖ | ➖ | Giữ quyết định cũ: file performance theo OA không có tốc độ chung |
+| 70 | Đơn xin cấp phép quy hoạch gần đây | CrystalRoof API | London Planning Datahub (GLA) | `london_planning` | ✅ | ✅ | 299.174 hồ sơ (268.982 có toạ độ), 3 năm; ngoài London chưa có nguồn mở đủ toạ độ |
+| 71 | Review cư dân | CrystalRoof | Tự thu thập | web `/uk/review/new` | — | ✅ | `mkt_uk.review` (role `zonecheck_review` chỉ INSERT), duyệt: `python -m uk.manual.reviews` |
+| 72 | Định giá tức thì | CrystalRoof | PPD + EPC + UK HPI | web `/uk/valuation` | — | ✅ | Diện tích EPC × £/m² sector 24 tháng (quy về hôm nay bằng HPI), khoảng = tứ phân vị |
+| 73 | Council tax band theo từng địa chỉ | CrystalRoof API | VOA | — | ➖ | ➖ | Không có file tổng hợp lệ |
+| 74 | Thu nhập dưới cấp MSOA | CrystalRoof | — | — | ➖ | ➖ | Dùng MSOA (LSOA nhận giá trị MSOA cha), ghi rõ trên trang |
+
 ## Nhật ký
+
+- 2026-10-14 (tối): toàn bộ hàng đợi xong. Sửa trong lúc chạy: regex OpenRoads, Last-Modified ISO (London Datastore), file Census rỗng, độ phủ tội phạm đo theo lực lượng thay vì theo LAD (BTP vẫn báo vụ ở Manchester), xu hướng tội phạm tính sẵn (`crime_history`) vì truy vấn trực tiếp cho London mất 31 giây.
+- 2026-10-14: triển khai kế hoạch khảo sát CrystalRoof (COMPETITOR_CRYSTALROOF.md). Nạp xong: IoD sub-domain, tuyển sinh đủ nguyện vọng, kết quả thi + TB LA/England, hồ sơ trường (SPC, SEN, vắng học, destinations, môn thi), ranh giới ward. Đang chạy trên VPS: derive ward/crime/rollup/census_shares/phân vị, OAC, OpenRoads, LAEI, OSM (cứu thương, bệnh viện), PTAL lưới, ORR hãng ga, Census bổ sung, London planning, lịch sử tội phạm.
 
 - 2026-10-13 17:25 (giờ VPS): đợt 2 xong.
   - **GPPS:** link CSV practice-level ở `gp-patient.co.uk/latest-survey/results`. 6.154 phòng khám khớp POI GP → `uk.gp.*`.

@@ -94,6 +94,13 @@ IOD_DOMAINS = [  # (tiền tố cột, id, tên)
     ("Living Environment", "living_env", "Living environment deprivation"),
     ("Income Deprivation Affecting Children Index (IDACI)", "idaci", "Income deprivation affecting children"),
     ("Income Deprivation Affecting Older People (IDAOPI)", "idaopi", "Income deprivation affecting older people"),
+    # sub-domain (cùng File 7)
+    ("Children and Young People Sub-domain", "sub_children", "Children and young people education sub-domain"),
+    ("Adult Skills Sub-domain", "sub_adult_skills", "Adult skills sub-domain"),
+    ("Geographical Barriers Sub-domain", "sub_geo_barriers", "Geographical barriers sub-domain"),
+    ("Wider Barriers Sub-domain", "sub_wider_barriers", "Wider barriers sub-domain"),
+    ("Indoors Sub-domain", "sub_indoors", "Indoors living environment sub-domain"),
+    ("Outdoors Sub-domain", "sub_outdoors", "Outdoors living environment sub-domain"),
 ]
 
 
@@ -138,7 +145,7 @@ class IodLoader(Loader):
 
 # ===================================================================== Census =====
 CENSUS_LEVELS = {"oa": "oa", "lsoa": "lsoa", "msoa": "msoa", "ltla": "lad", "rgn": "region", "ctry": "nation"}
-CENSUS_SENSITIVE = {"ts021", "ts030", "ts004"}  # dân tộc, tôn giáo, nơi sinh: chỉ mô tả, không tính điểm (PLAN §7)
+CENSUS_SENSITIVE = {"ts021", "ts030", "ts004", "ts005", "ts015", "ts019", "ts025", "ts026", "ts027", "ts032"}  # dân tộc, tôn giáo, nơi sinh: chỉ mô tả, không tính điểm (PLAN §7)
 
 
 class CensusLoader(Loader):
@@ -162,7 +169,10 @@ class CensusLoader(Loader):
                     level = CENSUS_LEVELS[m.group(1)]
                     with zf.open(member) as f:
                         rd = csv.reader(io.TextIOWrapper(f, encoding="utf-8-sig", newline=""))
-                        header = next(rd)
+                        header = next(rd, None)
+                        if not header:  # Nomis đôi khi để file rỗng ở một cấp (ví dụ ts010 LSOA)
+                            log.warning("    %s rỗng, bỏ qua cấp %s", member, level)
+                            continue
                         cats = header[3:]
                         if not cats:
                             raise LoadError(f"{member}: không có cột số liệu")
@@ -467,6 +477,12 @@ class IncomeLoader(Loader):
         n, unmatched = insert_values(ctx, t, "income MSOA")
         ctx.drop_stage("mv_income")
         return {"values": n, "unmatched": unmatched, "fye": fye}
+
+
+class CensusMoreLoader(CensusLoader):
+    source = "census2021_more"
+    depends_on = ("boundaries_oa21", "onspd", "census2021")
+    description = "Census 2021 bảng bổ sung đợt 3 → uk.census21.<ts> (hộ chiếu, di cư, ngôn ngữ, bản sắc: nhạy cảm, không tính điểm)"
 
 
 class CensusExtraLoader(CensusLoader):

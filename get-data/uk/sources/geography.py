@@ -68,6 +68,7 @@ OS_SOURCES = [
     OsOpenData("os_boundary_line", "BoundaryLine", "GeoPackage",
                "OS Boundary-Line: ward, khu bầu cử Westminster, county, parish… kèm tên (GB)"),
     OsOpenData("os_built_up_areas", "BuiltUpAreas", "GeoPackage", "OS Open Built Up Areas: ranh giới khu đô thị (GB)"),
+    OsOpenData("os_open_roads", "OpenRoads", "GeoPackage", "OS Open Roads: mạng đường GB (motorway, A, B…), đường gần nhất và tiếng ồn"),
 ]
 
 
@@ -116,4 +117,5 @@ BOUNDARY_SOURCES = [
     OnsBoundary("msoa21", "Middle layer Super Output Areas", "Boundaries EW BGC", "Ranh giới MSOA 2021 (E&W, ~7,3k)"),
     OnsBoundary("lad", "Local Authority Districts", "Boundaries UK BGC", "Ranh giới Local Authority District mới nhất (UK)"),
     OnsBoundary("rgn", "Regions", "Boundaries EN BGC", "Ranh giới Region mới nhất (England)"),
+    OnsBoundary("ward", "Wards", "Boundaries UK BGC", "Ranh giới ward bầu cử mới nhất (UK), cùng phiên bản mã với ONSPD"),
 ]

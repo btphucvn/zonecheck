@@ -210,7 +210,7 @@ async function recentSales(head: AreaHead): Promise<Sale[]> {
         from mkt_uk.price_paid t where t.postcode = p.postcode and t.ppd_category = 'A'
         order by t.transfer_date desc limit 3) x
       order by x.d desc limit 10`;
-  } else if (head.level === "town" || head.level === "lad") {
+  } else if (head.level === "town" || head.level === "ward" || head.level === "lad") {
     rows = await sql`
       select transfer_date::text as d, price, property_type, tenure, is_new_build, street, postcode
       from mkt_uk.price_paid
@@ -508,7 +508,7 @@ export async function getAreaReport(level: string, slug: string): Promise<AreaRe
     if (!head) return null;
     const ctx = await loadContext(head);
     const dataId = ctx.dataArea.id;
-    const ids = [dataId, ctx.lad?.id, ctx.nation?.id].filter((x): x is number => x != null);
+    const ids = [dataId, ctx.lad?.id, ctx.region?.id, ctx.nation?.id].filter((x): x is number => x != null);
     const ladId = ctx.lad?.id;
 
     const key = `${level}/${slug}`;
@@ -555,9 +555,29 @@ export async function getAreaReport(level: string, slug: string): Promise<AreaRe
       ]);
     const [riskPoint, overflows, incidents, tribunals, nurseries, mp] = extras;
 
-    const metrics = mm[dataId] ?? {};
+    const metrics: MetricMap = mm[dataId] ?? {};
     const ladMetrics = ladId ? (mm[ladId] ?? {}) : {};
     const nationMetrics = ctx.nation ? (mm[ctx.nation.id] ?? {}) : {};
+    const regionMetrics = ctx.region ? (mm[ctx.region.id] ?? {}) : {};
+    if (ctx.dataArea.level === "lsoa") {
+      // Figures published only for MSOAs (household income): a neighbourhood takes its MSOA's value and rank.
+      const rows = await soft("msoa metrics", key, Promise.resolve(sql`
+        select distinct on (v.metric_id) v.metric_id, v.period::text as period, v.value_num, v.value_json, v.sample_size,
+               v.percentile::float8 as percentile, v.is_suppressed
+        from core.geo_area_link k
+        join core.geo_area m on m.id = k.parent_id and m.level_code = 'msoa'
+        join core.metric_value v on v.market_code = ${M} and v.area_id = m.id
+        join core.metric mt on mt.id = v.metric_id and mt.native_level = 'msoa'
+        where k.child_id = ${dataId} and k.relation = 'best_fit'
+        order by v.metric_id, v.period desc`).then((r) => [...r] as Row[]), [] as Row[]);
+      for (const r of rows) {
+        if (metrics[r.metric_id]) continue;
+        metrics[r.metric_id] = {
+          v: r.is_suppressed ? null : r.value_num, j: r.is_suppressed ? null : r.value_json, period: r.period,
+          n: r.sample_size, p: r.is_suppressed ? null : r.percentile, suppressed: r.is_suppressed,
+        };
+      }
+    }
     fillPercentiles(metrics, ctx.dataArea.level);
     fillPercentiles(ladMetrics, "lad");
 
@@ -578,7 +598,7 @@ export async function getAreaReport(level: string, slug: string): Promise<AreaRe
     }
 
     return {
-      head, ctx, geojson: geo.geojson, bbox: geo.bbox, boundaryApprox: !!geo.approx, metrics, ladMetrics, nationMetrics, categories, scoreSource,
+      head, ctx, geojson: geo.geojson, bbox: geo.bbox, boundaryApprox: !!geo.approx, metrics, ladMetrics, regionMetrics, nationMetrics, categories, scoreSource,
       sales, rentHistory: rentHistory.map((r: Row) => ({ period: r.period, v: r.v })), epc, schools, stations, amenities,
       zones, riskPoint, overflows, incidents, tribunals, nurseries, mp, listedCount: listed,
       ctaxBands: ctaxBands.map((r: Row) => ({ band: r.band, amount: r.amount, year: r.financial_year })),
@@ -599,7 +619,7 @@ export async function getAreaCard(level: string, slug: string) {
     const ctx = await loadContext(head);
     const dataId = ctx.dataArea.id;
     const [catalog, mm, dbScores] = await Promise.all([loadMetricCatalog(M, "en"), metricsFor([dataId]), dbCategoryScores(dataId)]);
-    const metrics = mm[dataId] ?? {};
+    const metrics: MetricMap = mm[dataId] ?? {};
     fillPercentiles(metrics, ctx.dataArea.level);
     let categories = dbScores;
     if (!categories.some((c) => c.score != null)) categories = computeCategories(metrics, catalog);

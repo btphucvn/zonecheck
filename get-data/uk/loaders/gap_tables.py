@@ -207,7 +207,7 @@ class AffordabilityLoader(Loader):
 class PtalLoader(Loader):
     source = "london_ptal"
     depends_on = ("boundaries_lsoa21",)
-    description = "London PTAL 2015 (trung bình PTAI theo LSOA 2011, chỉ LSOA không đổi mã) → uk.london.ptai"
+    description = "London PTAL 2015 → uk.london.ptai (LSOA) + mkt_uk.ptal_grid (lưới 100 m)"
 
     def load(self, ctx: LoadContext) -> dict:
         rows = []
@@ -238,7 +238,53 @@ class PtalLoader(Loader):
         if city is None or city < 40:
             raise LoadError(f"PTAI City of London bất thường: {city}")
         ctx.drop_stage("ptal")
-        return {"values": n, "lsoa_2011": len(rows)}
+        return {"values": n, "lsoa_2011": len(rows), **self._grid(ctx)}
+
+    def _grid(self, ctx: LoadContext) -> dict:
+        """Lưới 100 m (tâm ô, BNG) → mkt_uk.ptal_grid để tra PTAL đúng tại một địa chỉ (ô gần nhất)."""
+        import openpyxl
+        z = ctx.file(r"Grid.*Values.*\.zip$")
+        with zipfile.ZipFile(z) as zf:
+            m = [n for n in zf.namelist() if n.lower().endswith(".xlsx")]
+            if len(m) != 1:
+                raise LoadError(f"Cần 1 file xlsx trong {z.name}, thấy {m}")
+            wb = openpyxl.load_workbook(io.BytesIO(zf.read(m[0])), read_only=True)
+        it = wb.worksheets[0].iter_rows(values_only=True)
+        head = [str(h) for h in next(it)]
+        need = ["X", "Y", "AI2015", "PTAL2015"]
+        if any(c not in head for c in need):
+            raise LoadError(f"Lưới PTAL thiếu cột {need}: {head}")
+        ix = [head.index(c) for c in need]
+        bands = {"0", "1a", "1b", "2", "3", "4", "5", "6a", "6b"}
+        rows, odd = [], 0
+        for r in it:
+            x, y, ai, ptal = (r[i] for i in ix)
+            ptal = str(ptal).strip()
+            if x is None or y is None or ptal not in bands:
+                odd += 1
+                continue
+            rows.append((float(x), float(y), float(ai or 0), ptal))
+        wb.close()
+        if not 150_000 <= len(rows) <= 170_000 or odd > 100:
+            raise LoadError(f"Lưới PTAL: {len(rows)} ô hợp lệ, {odd} ô lạ")
+        ctx.conn.execute("""CREATE TABLE IF NOT EXISTS mkt_uk.ptal_grid (
+            id serial PRIMARY KEY, ai real NOT NULL, ptal text NOT NULL, geom geometry(Point, 4326) NOT NULL,
+            release_id bigint REFERENCES ops.dataset_release (id))""")
+        ctx.conn.execute("CREATE INDEX IF NOT EXISTS ptal_grid_geom ON mkt_uk.ptal_grid USING gist (geom)")
+        ctx.conn.execute("COMMENT ON TABLE mkt_uk.ptal_grid IS 'TfL PTAL 2015, lưới 100 m (tâm ô) London: chỉ số AI và dải PTAL 0–6b. London Datastore, OGL.'")
+        st = ctx.stage_table("ptal_grid", ["x", "y", "ai", "ptal"], {"x": "float8", "y": "float8", "ai": "float8"})
+        ctx.copy_rows(st, ["x", "y", "ai", "ptal"], rows, "COPY lưới PTAL")
+        ctx.sql("thay lưới PTAL", "TRUNCATE mkt_uk.ptal_grid")
+        n = ctx.sql("ghi lưới PTAL", f"""INSERT INTO mkt_uk.ptal_grid (ai, ptal, geom, release_id)
+            SELECT ai, ptal, ST_Transform(ST_SetSRID(ST_MakePoint(x, y), 27700), 4326), %s FROM {st}""", (ctx.release_id,))
+        # kiểm tra định hướng: ô gần Bank (trung tâm City) phải là 6b
+        bank = ctx.scalar("""SELECT ptal FROM mkt_uk.ptal_grid ORDER BY geom <-> ST_SetSRID(ST_MakePoint(-0.0886, 51.5133), 4326) LIMIT 1""")
+        log.info("    lưới PTAL: %s ô, ô gần Bank = %s", f"{n:,}", bank)
+        if bank != "6b":
+            raise LoadError(f"PTAL tại Bank phải là 6b, thấy {bank}")
+        ctx.conn.execute("ANALYZE mkt_uk.ptal_grid")
+        ctx.drop_stage("ptal_grid")
+        return {"grid_cells": n}
 
 
 # ------------------------------------------------------------ fly-tipping -----
@@ -540,10 +586,20 @@ class ChildcareLoader(Loader):
 
 
 # ----------------------------------------------------- tuyển sinh cấp trường -----
+OFFER_COLS = {  # cột stage → cột file cấp trường
+    "places": "total_number_places_offered", "first_apps": "times_put_as_1st_preference",
+    "second_apps": "times_put_as_2nd_preference", "third_apps": "times_put_as_3rd_preference",
+    "any_apps": "times_put_as_any_preferred_school", "other_la_apps": "all_applications_from_another_LA",
+    "first_offers": "number_1st_preference_offers", "second_offers": "number_2nd_preference_offers",
+    "third_offers": "number_3rd_preference_offers", "preferred_offers": "number_preferred_offers",
+    "other_la_offers": "offers_to_applicants_from_another_LA",
+}
+
+
 class SchoolOffersLoader(Loader):
     source = "dfe_school_offers"
     depends_on = ("gias",)
-    description = "DfE applications & offers cấp trường → core.poi_metric_value uk.school.{places_offered,first_pref_apps,first_pref_ratio}"
+    description = "DfE applications & offers cấp trường → core.poi_metric_value uk.school.* (chỉ tiêu, đơn và offer theo nguyện vọng 1/2/3, LA khác)"
 
     def load(self, ctx: LoadContext) -> dict:
         z = ctx.file(r"^ees_.*\.zip$")
@@ -557,20 +613,28 @@ class SchoolOffersLoader(Loader):
                 if not re.fullmatch(r"\d{6}", tp) or not r.get("school_urn"):
                     continue
                 period = date(int(tp[:4]), 9, 1)
-                places, first, offers1 = _num(r["total_number_places_offered"]), _num(r["times_put_as_1st_preference"]), \
-                    _num(r["number_1st_preference_offers"])
-                rows.append((r["school_urn"].strip(), period, places, first, offers1, r.get("school_phase")))
+                rows.append((r["school_urn"].strip(), period, *(_num(r.get(c, "")) for c in OFFER_COLS.values()),
+                             r.get("school_phase")))
         if len(rows) < 100_000:
             raise LoadError(f"Chỉ có {len(rows):,} dòng cấp trường (kỳ vọng nhiều năm × ~20 nghìn trường)")
-        st = ctx.stage_table("offers", ["urn", "period", "places", "first_apps", "first_offers", "phase"],
-                             {"period": "date", "places": "float8", "first_apps": "float8", "first_offers": "float8"})
-        ctx.copy_rows(st, ["urn", "period", "places", "first_apps", "first_offers", "phase"], rows, "COPY offers")
+        cols = ["urn", "period", *OFFER_COLS, "phase"]
+        st = ctx.stage_table("offers", cols, {"period": "date", **{c: "float8" for c in OFFER_COLS}})
+        ctx.copy_rows(st, cols, rows, "COPY offers")
         defs = {"uk.school.places_offered": ("Places offered at entry", "count", "s.places"),
                 "uk.school.first_pref_apps": ("First-preference applications", "count", "s.first_apps"),
                 "uk.school.first_pref_ratio": ("First-preference applications per place offered", "number",
                                                "round((s.first_apps / nullif(s.places, 0))::numeric, 2)"),
                 "uk.school.first_pref_offer_rate": ("Share of first-preference applicants offered a place", "percent",
-                                                    "round((100 * s.first_offers / nullif(s.first_apps, 0))::numeric, 1)")}
+                                                    "round((100 * s.first_offers / nullif(s.first_apps, 0))::numeric, 1)"),
+                "uk.school.second_pref_apps": ("Second-preference applications", "count", "s.second_apps"),
+                "uk.school.third_pref_apps": ("Third-preference applications", "count", "s.third_apps"),
+                "uk.school.any_pref_apps": ("Applications naming the school at any preference", "count", "s.any_apps"),
+                "uk.school.other_la_apps": ("Applications from another local authority", "count", "s.other_la_apps"),
+                "uk.school.first_pref_offers": ("Offers made to first-preference applicants", "count", "s.first_offers"),
+                "uk.school.second_pref_offers": ("Offers made to second-preference applicants", "count", "s.second_offers"),
+                "uk.school.third_pref_offers": ("Offers made to third-preference applicants", "count", "s.third_offers"),
+                "uk.school.preferred_offers": ("Offers made to applicants who named the school", "count", "s.preferred_offers"),
+                "uk.school.other_la_offers": ("Offers made to applicants from another local authority", "count", "s.other_la_offers")}
         for mid, (name, vt, _) in defs.items():
             register_metric(ctx, mid, category="education", dataset="uk.dfe.school_offers", value_type=vt,
                             decimals=2 if vt == "number" else (1 if vt == "percent" else 0),
@@ -592,6 +656,12 @@ class SchoolOffersLoader(Loader):
         log.info("    %.1f%% URN khớp trường trong GIAS", match * 100)
         if match < 0.9:
             raise LoadError(f"Chỉ {match:.1%} URN khớp GIAS")
+        bad = ctx.scalar(f"""SELECT count(*) FILTER (WHERE first_offers > first_apps OR second_offers > second_apps
+                OR third_offers > third_apps OR first_apps > any_apps OR preferred_offers > places * 1.1 + 2)::float
+                / count(*) FROM {st}""")
+        log.info("    %.2f%% dòng có offer > đơn hoặc offer > chỉ tiêu", bad * 100)
+        if bad > 0.01:
+            raise LoadError(f"{bad:.1%} dòng có số offer/đơn mâu thuẫn")
         ctx.drop_stage("offers")
         return {"rows": len(rows), "values": n, "urn_match": round(match, 3)}
 

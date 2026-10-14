@@ -8,10 +8,10 @@ export const PLATE_LEVELS = new Set(["postcode_unit", "sector", "district"]);
 /** Report sections that have their own detail page: section id → URL segment. */
 export const TOPIC_PAGES: Record<string, string> = {
   prices: "prices", rent: "rent", safety: "crime", risk: "flood-risk", schools: "schools", transport: "transport", amenities: "amenities",
-  environment: "environment", connectivity: "broadband", people: "people", energy: "energy", planning: "planning", costs: "costs",
+  environment: "environment", connectivity: "broadband", affluence: "affluence", people: "people", energy: "energy", planning: "planning", costs: "costs",
 };
 /** Levels each detail page supports (crime aggregates LSOAs per request; a region is ~5,000). */
-const LOCAL_LEVELS = new Set(["postcode_unit", "sector", "district", "town", "lad"]);
+const LOCAL_LEVELS = new Set(["postcode_unit", "sector", "district", "town", "ward", "lad"]);
 const TOPIC_LEVELS: Record<string, Set<string>> = Object.fromEntries(Object.values(TOPIC_PAGES).map((t) => [t, LOCAL_LEVELS]));
 
 /** Detail page path for a report section, or null when the area has none. */
@@ -25,7 +25,7 @@ export const TOPIC_SECTION: Record<string, string> = Object.fromEntries(Object.e
 
 export const areaPath = (head: Pick<AreaHead, "level" | "slug">) => `/uk/${uk.segmentForLevel(head.level)}/${head.slug}`;
 
-export function lv2key(level: string): "postcode" | "sector" | "district" | "town" | "lad" | "region" {
+export function lv2key(level: string): "postcode" | "sector" | "district" | "town" | "ward" | "lad" | "region" {
   return level === "postcode_unit" ? "postcode" : (level as "sector");
 }
 
@@ -51,7 +51,7 @@ export function Crumbs({ items }: { items: { label: string; href: string }[] }) 
   );
 }
 
-const TAB_SECTIONS = ["prices", "rent", "safety", "risk", "schools", "transport", "amenities", "environment", "connectivity", "people", "energy", "planning", "costs"] as const;
+const TAB_SECTIONS = ["prices", "rent", "affluence", "safety", "people", "risk", "schools", "transport", "amenities", "environment", "connectivity", "energy", "planning", "costs"] as const;
 
 /** Overview + one tab per report section; sections without a detail page jump to the report. */
 export function TopicTabs({ head, t, active }: { head: Pick<AreaHead, "level" | "slug">; t: Dict; active: string }) {

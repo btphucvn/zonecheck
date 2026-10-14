@@ -70,9 +70,10 @@ export interface SchoolRow {
   pupils: number | null; capacity: number | null; fsm: number | null; admissions: string | null;
   rating: { label: string; rank: number | null } | null;
   ks2: number | null; a8: number | null; p8: number | null; offerRate: number | null;
+  funding: "State-funded" | "Independent"; oversubscribed: boolean | null;
 }
 
-/** Schools within 3 km (up to 30), with GIAS details, Ofsted grade, results and admissions. */
+/** Schools within 3 km (up to 60), with GIAS details, Ofsted grade, results and admissions. */
 export async function getSchoolsDetail(lon: number, lat: number): Promise<SchoolRow[]> {
   "use cache";
   cacheLife("days");
@@ -84,7 +85,7 @@ export async function getSchoolsDetail(lon: number, lat: number): Promise<School
       from core.poi p
       where p.market_code = ${M} and p.status = 'open' and p.type_code in ('school.primary', 'school.secondary', 'school.all_through', 'school.special', 'school.post16')
         and st_dwithin(p.geom, ${pt}, 0.05) and st_dwithin(p.geom::geography, ${pt}::geography, 3000)
-      order by p.geom <-> ${pt} limit 30`;
+      order by p.geom <-> ${pt} limit 60`;
     if (!pois.length) return [];
     const ids = pois.map((p: Row) => p.id);
     const [ratings, metrics] = await Promise.all([
@@ -94,7 +95,8 @@ export async function getSchoolsDetail(lon: number, lat: number): Promise<School
           order by poi_id, rated_on desc, (scheme = 'ofsted_oeif') desc`,
       sql`select distinct on (poi_id, metric_id) poi_id::int, metric_id, value_num from core.poi_metric_value
           where poi_id = any(${ids}::bigint[]) and not is_suppressed and value_num is not null
-            and metric_id in ('uk.ks2.rwm_expected_pct', 'uk.ks4.attainment8', 'uk.ks4.progress8', 'uk.school.first_pref_offer_rate')
+            and metric_id in ('uk.ks2.rwm_expected_pct', 'uk.ks4.attainment8', 'uk.ks4.progress8', 'uk.school.first_pref_offer_rate',
+                              'uk.school.first_pref_apps', 'uk.school.places_offered')
           order by poi_id, metric_id, period desc`,
     ]);
     const mv = (id: number, m: string) => (metrics.find((x: Row) => x.poi_id === id && x.metric_id === m)?.value_num as number | undefined) ?? null;
@@ -114,6 +116,9 @@ export async function getSchoolsDetail(lon: number, lat: number): Promise<School
         rating: r ? { label: r.scheme === "ofsted_report_card" ? "Report card" : r.grade_label, rank: r.grade_rank } : null,
         ks2: mv(p.id, "uk.ks2.rwm_expected_pct"), a8: mv(p.id, "uk.ks4.attainment8"), p8: mv(p.id, "uk.ks4.progress8"),
         offerRate: mv(p.id, "uk.school.first_pref_offer_rate"),
+        funding: /independent/i.test(a["EstablishmentTypeGroup (name)"] ?? "") ? "Independent" : "State-funded",
+        oversubscribed: mv(p.id, "uk.school.first_pref_apps") != null && mv(p.id, "uk.school.places_offered")
+          ? mv(p.id, "uk.school.first_pref_apps")! > mv(p.id, "uk.school.places_offered")! : null,
       };
     });
   })(), [] as SchoolRow[], 12000), 3);
@@ -184,6 +189,35 @@ export async function getAmenityDetail(lon: number, lat: number): Promise<{ kind
 /* ------------------------------------------------------------ planning */
 
 export interface ListedRow { name: string; grade: string | null; dist: number; url: string | null; listed: string | null }
+
+export interface PlanningApp {
+  ref: string | null; address: string | null; description: string | null; type: string | null; status: string | null;
+  decision: string | null; validDate: string | null; url: string | null; dist: number;
+}
+
+/** Planning applications validated in the last two years within 500 m (where published with a location: London so far). */
+export async function getPlanningApps(lon: number, lat: number): Promise<{ total: number; recent: PlanningApp[] } | null> {
+  "use cache";
+  cacheLife("days");
+  cacheTag(`market:${M}`);
+  return scoped(async () => soft("planning apps", (async () => {
+    const pt = point(lon, lat);
+    const near = sql`st_dwithin(geom, ${pt}, 0.01) and st_dwithin(geom::geography, ${pt}::geography, 500)
+                     and valid_date >= current_date - interval '2 years'`;
+    const [[n], rows] = await Promise.all([
+      sql`select count(*)::int as n from mkt_uk.planning_application where ${near}`,
+      sql`select reference, address, description, app_type_full, status, decision, valid_date::text as vd, url,
+                 st_distance(geom::geography, ${pt}::geography)::float8 as d
+          from mkt_uk.planning_application where ${near} order by valid_date desc limit 15`,
+    ]);
+    if (!n?.n) return null;
+    return {
+      total: n.n,
+      recent: rows.map((r: Row) => ({ ref: r.reference, address: r.address, description: r.description, type: r.app_type_full, status: r.status,
+        decision: r.decision, validDate: r.vd, url: r.url, dist: r.d })),
+    };
+  })(), null), 3);
+}
 
 /** Listed buildings within 500 m (nearest 12) and brownfield sites within 1 km. */
 export async function getPlanningDetail(lon: number, lat: number): Promise<{ listed: ListedRow[]; listedTotal: number; brownfield: number }> {

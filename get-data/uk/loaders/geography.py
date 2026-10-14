@@ -121,6 +121,69 @@ def _build_nations(ctx: LoadContext) -> None:
         ON CONFLICT DO NOTHING""")
 
 
+class WardLoader(BoundaryLoader):
+    """Ward bầu cử (E&W) → core.geo_area level 'ward'. Slug = tên ward + tên LAD (tên ward trùng nhau giữa các LAD),
+    liên kết ward → LAD theo LAD của đa số postcode trong ward (ONSPD)."""
+
+    def __init__(self):
+        super().__init__("boundaries_ward", "ward", "WD", True)
+        self.depends_on = ("boundaries_lad", "onspd")
+
+    def load(self, ctx: LoadContext) -> dict:
+        src = ctx.file(r"\.geojson$")
+        t = "b_ward"
+        ctx.ogr_load(str(src), t)
+        cols = [r[0] for r in ctx.conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s", (STAGE, t)).fetchall()]
+        code_col = _pick(cols, r"^wd\d\dcd$")
+        name_col = _pick(cols, r"^wd\d\dnm$")
+        removed = ctx.sql("bỏ ward Scotland/Bắc Ireland", f"DELETE FROM {STAGE}.{t} WHERE left({code_col}, 1) NOT IN ('E', 'W')")
+        n_src = ctx.scalar(f"SELECT count(*) FROM {STAGE}.{t}")
+        if not 7000 <= n_src <= 8500:
+            raise LoadError(f"Số ward E&W bất thường: {n_src}")
+        # LAD của từng ward theo đa số postcode đang dùng
+        ctx.sql("LAD của ward", f"""
+            CREATE TEMP TABLE ward_lad ON COMMIT DROP AS
+            SELECT DISTINCT ON (ward_code) ward_code, lad_code FROM (
+                SELECT ward_code, lad_code, count(*) n FROM mkt_uk.postcode
+                WHERE status = 'live' AND left(ward_code, 1) IN ('E', 'W') GROUP BY 1, 2) x
+            ORDER BY ward_code, n DESC""")
+        match = ctx.scalar(f"SELECT avg((w.ward_code IS NOT NULL)::int)::float8 FROM {STAGE}.{t} s LEFT JOIN ward_lad w ON w.ward_code = s.{code_col}")
+        log.info("    %.1f%% ward khớp mã ward trong ONSPD", (match or 0) * 100)
+        if (match or 0) < 0.97:
+            raise LoadError(f"Chỉ {match:.1%} ward khớp ONSPD — phiên bản ranh giới khác phiên bản mã của ONSPD")
+        ctx.sql("upsert core.geo_area ward", f"""
+            INSERT INTO core.geo_area (market_code, level_code, code, slug, name, geom, geom_simplified, centroid, area_km2, is_active, attrs)
+            SELECT 'uk', 'ward', g.code, g.slug, g.name, g.geom, ST_Multi(ST_SimplifyPreserveTopology(g.geom, 0.0002)),
+                   ST_PointOnSurface(g.geom), ST_Area(g.geom::geography) / 1e6, true,
+                   jsonb_build_object('source_release', %(release)s, 'lad_code', g.lad_code)
+            FROM (SELECT code, name, geom, lad_code,
+                         CASE WHEN count(*) OVER (PARTITION BY slug0) > 1 THEN slug0 || '-' || lower(code) ELSE slug0 END AS slug
+                  FROM (SELECT s.{code_col} AS code, s.{name_col} AS name, w.lad_code,
+                               {slug_sql(f"s.{name_col} || ' ' || coalesce(l.name, '')")} AS slug0,
+                               ST_Multi(ST_CollectionExtract(ST_MakeValid(s.geom), 3)) AS geom
+                        FROM {STAGE}.{t} s LEFT JOIN ward_lad w ON w.ward_code = s.{code_col}
+                        LEFT JOIN core.geo_area l ON l.market_code = 'uk' AND l.level_code = 'lad' AND l.code = w.lad_code) a) g
+            ON CONFLICT (market_code, level_code, code) DO UPDATE SET
+                name = EXCLUDED.name, slug = EXCLUDED.slug, geom = EXCLUDED.geom, geom_simplified = EXCLUDED.geom_simplified,
+                centroid = EXCLUDED.centroid, area_km2 = EXCLUDED.area_km2, is_active = true, valid_to = NULL,
+                attrs = core.geo_area.attrs || EXCLUDED.attrs""", {"release": ctx.release_id})
+        retired = ctx.sql("ward không còn trong bản mới", f"""
+            UPDATE core.geo_area a SET is_active = false, valid_to = current_date
+            WHERE a.market_code = 'uk' AND a.level_code = 'ward' AND a.is_active
+              AND NOT EXISTS (SELECT 1 FROM {STAGE}.{t} s WHERE s.{code_col} = a.code)""")
+        ctx.sql("liên kết ward → lad", """
+            INSERT INTO core.geo_area_link (child_id, parent_id, relation, weight, weight_basis)
+            SELECT w.id, l.id, 'within', 1, 'none' FROM core.geo_area w
+            JOIN core.geo_area l ON l.market_code = 'uk' AND l.level_code = 'lad' AND l.code = w.attrs->>'lad_code'
+            WHERE w.market_code = 'uk' AND w.level_code = 'ward' AND w.is_active
+            ON CONFLICT DO NOTHING""")
+        n_db = ctx.scalar("SELECT count(*) FROM core.geo_area WHERE market_code='uk' AND level_code='ward' AND is_active")
+        ctx.expect("geo_area ward đang hoạt động", n_db, n_src)
+        ctx.drop_stage(t)
+        return {"features": n_src, "removed_non_ew": removed, "retired": retired, "onspd_match": round(match, 4)}
+
+
 BOUNDARY_LOADERS = [
     BoundaryLoader("boundaries_rgn", "region", "RGN", True),
     BoundaryLoader("boundaries_lad", "lad", "LAD", True),
@@ -128,6 +191,7 @@ BOUNDARY_LOADERS = [
     BoundaryLoader("boundaries_lsoa21", "lsoa", "LSOA", False),
     BoundaryLoader("boundaries_oa21", "oa", "OA", False),
 ]
+WARD_LOADER = WardLoader()
 BOUNDARY_LOADERS[4].depends_on = ("boundaries_lsoa21",)  # cần LSOA để liên kết oa → lsoa
 
 

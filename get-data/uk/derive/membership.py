@@ -15,7 +15,7 @@ from .base import Step
 
 log = logging.getLogger(__name__)
 
-LEVEL_COLS = {"sector": "sector", "district": "district", "postal_area": "postal_area",
+LEVEL_COLS = {"sector": "sector", "district": "district", "postal_area": "postal_area", "ward": "ward_code",
               "msoa": "msoa21_code", "lad": "lad_code", "region": "region_code"}
 TOWN_RADIUS_M = {"City": 4000, "Town": 2000, "Suburban Area": 1000, "Village": 800}
 EW_POPULATION_2021 = 59_597_542
@@ -29,7 +29,7 @@ class Membership(Step):
     def run(self, ctx: LoadContext) -> dict:
         ctx.sql("dân số mỗi postcode", """
             CREATE TEMP TABLE pc_pop ON COMMIT DROP AS
-            SELECT p.postcode, p.oa21_code, p.lsoa21_code, p.sector, p.district, p.postal_area, p.msoa21_code,
+            SELECT p.postcode, p.oa21_code, p.lsoa21_code, p.sector, p.district, p.postal_area, p.msoa21_code, p.ward_code,
                    p.lad_code, p.region_code, p.country_code, p.geom,
                    v.value_num / count(*) OVER (PARTITION BY p.oa21_code) AS pop
             FROM mkt_uk.postcode p

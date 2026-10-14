@@ -1,0 +1,78 @@
+Instant property valuation New!
+
+Get started
+
+For Individuals
+
+Go to For Businesses
+Review your area
+Find Mortgage Broker
+Pricing
+MR
+Overview
+Affluence
+Crime
+Demographics
+Noise
+Transport
+Amenities
+Schools
+Environment
+Reviews
+Air Quality
+Flood Risk
+Pollutant: NO2 level
+Legend
+ Leaflet | © OpenStreetMap contributors
+Air Quality and Flood Risk on map, Adys Road, London, SE15 4DX
+UK
+England
+London
+Southwark
+Rye Lane
+SE15 4DX
+Air Quality in Adys Road, London, SE15 4DX
+The air quality is expected to meet EU limit values in this location
+Nitrogen dioxide pollution
+
+NO2 (nitrogen dioxide) annual mean level is 37.8 µg/m3, which is below EU quality limit set to 40 µg/m3.
+
+Increased levels of nitrogen dioxide can have significant impacts on people with asthma because it can cause more frequent and more intense attacks. Children with asthma and older people with heart disease are most at risk.
+
+Particulate matter pollution
+
+PM10 (10 micrometre particulate matter) annual mean level is 22.5 µg/m3, which is below EU quality limit set to 40 µg/m3.
+
+PM2.5 (2.5 micrometre particulate matter) annual mean level is 13.5 µg/m3, which is below EU quality limit set to 25 µg/m3.
+
+PM10d (days exceeding daily PM10 mean limit of 50 µg/m3) is approximately 8 days pear year, which is below the quality limit set to 35 days per year.
+
+PM2.5 and PM10 are atmospheric particulate matter with a diameter smaller than respectively 10, 2.5 microns. They are also called floating dust. Long-term exposure to increased levels of PM2.5 and PM10 may trigger or worsen chronic diseases such as asthma, heart attack, bronchitis and other respiratory problems.
+
+Explore air quality in nearby locations
+Air Quality in Ashleigh Mews, London, SE15 4BF
+Air Quality in Adys Road, London, SE15 4DZ
+Air Quality in Muschamp Road, London, SE15 4EG
+Air Quality in Oglander Road, London, SE15 4EQ
+Air Quality in Amott Road, London, SE15 4JD
+Air Quality in Nutbrook Street, London, SE15 4LE
+Air Quality in Maxted Road, London, SE15 4LF
+
+Data source: London Air Quality Network
+
+Find mortgage broker 
+Get free platform access
+Contact us contact@crystalroof.co.uk
+About
+All transport stations
+All postcodes in London
+All postcodes in the UK
+Privacy Policy
+Terms & Conditions
+API Overview & Pricing
+API Documentation
+Widgets for property websites
+
+© 2026 CrystalRoof, Ltd. 
+
+All rights reserved.

@@ -176,7 +176,7 @@ const METRIC_ID = /^uk\.[a-z0-9_]+(\.[a-z0-9_]+)+$/;
 /** Neighbourhoods (LSOAs) in view with the latest value and national percentile of up to six
  *  metrics, as m0_v / m0_p … in request order, plus a label point for the value bubble. */
 export async function metricAreaLayer(b: BBox, ids: string[]) {
-  const want = ids.filter((x) => METRIC_ID.test(x)).slice(0, 6);
+  const want = ids.filter((x) => METRIC_ID.test(x)).slice(0, 20);
   const none = { areas: fc([], () => ({})), labels: fc([], () => ({})) };
   if (!want.length || b[2] - b[0] > 0.2 || b[3] - b[1] > 0.12) return none;
   const tol = Math.max((b[2] - b[0]) / 3000, 0.00002);
@@ -189,12 +189,22 @@ export async function metricAreaLayer(b: BBox, ids: string[]) {
       select distinct on (v.area_id, v.metric_id) v.area_id, v.metric_id, v.value_num, v.percentile
       from core.metric_value v join a on a.id = v.area_id
       where v.market_code = 'uk' and v.metric_id = any(${want}::text[]) and not v.is_suppressed and v.value_num is not null
-      order by v.area_id, v.metric_id, v.period desc)
+      order by v.area_id, v.metric_id, v.period desc),
+    -- metrics published for MSOAs only (household income): each neighbourhood takes its MSOA's value
+    vm as (
+      select distinct on (a.id, v.metric_id) a.id as area_id, v.metric_id, v.value_num, v.percentile
+      from a join core.geo_area_link k on k.child_id = a.id and k.relation = 'best_fit'
+      join core.geo_area m on m.id = k.parent_id and m.level_code = 'msoa'
+      join core.metric mt on mt.id = any(${want}::text[]) and mt.native_level = 'msoa'
+      join core.metric_value v on v.market_code = 'uk' and v.area_id = m.id and v.metric_id = mt.id
+      where not v.is_suppressed and v.value_num is not null
+      order by a.id, v.metric_id, v.period desc),
+    vv as (select * from v union all select * from vm where not exists (select 1 from v where v.area_id = vm.area_id and v.metric_id = vm.metric_id))
     select a.code, a.name, a.population,
            st_asgeojson(st_simplifypreservetopology(a.geom, ${tol}), 5) as g,
            st_asgeojson(st_pointonsurface(a.geom), 5) as pt,
            jsonb_object_agg(v.metric_id, jsonb_build_array(v.value_num, v.percentile)) filter (where v.metric_id is not null) as mv
-    from a left join v on v.area_id = a.id
+    from a left join vv v on v.area_id = a.id
     group by a.id, a.code, a.name, a.population, a.geom`;
   const props = (r: Row) => {
     const o: Record<string, unknown> = { c: r.code, nm: r.name, pop: r.population };

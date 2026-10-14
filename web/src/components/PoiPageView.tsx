@@ -3,6 +3,7 @@ import { fmtDate, fmtDistance, fmtNumber } from "@/lib/format";
 import type { PoiPage } from "@/server/poi";
 import { AreaMap } from "./report/AreaMap";
 import { Ad, LineChart, Metric } from "./report/bits";
+import { SchoolDetail } from "./school/SchoolDetail";
 
 const ASPECT: Record<string, string> = {
   overall: "Overall effectiveness", quality_of_education: "Quality of education", behaviour_attitudes: "Behaviour and attitudes",
@@ -37,7 +38,8 @@ export function PoiPageView({ p, kind, intl }: { p: PoiPage; kind: "school" | "s
         ["Gender", a["Gender (name)"]], ["Religious character", a["ReligiousCharacter (name)"]], ["Admissions", a["AdmissionsPolicy (name)"]],
         ["Free school meals", a.PercentageFSM && `${a.PercentageFSM}%`], ["Trust", a["Trusts (name)"]], ["Local authority", a["LA (name)"]], ["URN", p.externalId],
       ]
-    : [["Station code", a.crs], ["Operator region", a.orr_region], ["Locality", a.locality], ["Busiest-station rank", a.usage_rank && `${a.usage_rank} in Great Britain`]];
+    : [["Station code", a.crs], ["Managed by", a.operator], ["Most journeys to or from", a.main_destination], ["Travel zone", a.tfl_zone],
+       ["Lines", Array.isArray(a.tfl_lines) ? (a.tfl_lines as unknown as string[]).join(", ") : a.tfl_lines], ["Operator region", a.orr_region], ["Locality", a.locality], ["Busiest-station rank", a.usage_rank && `${a.usage_rank} in Great Britain`]];
 
   return (
     <>
@@ -90,13 +92,15 @@ export function PoiPageView({ p, kind, intl }: { p: PoiPage; kind: "school" | "s
             </section>
           )}
 
-          {byMetric.size > 0 && (
+          {kind === "school" && <SchoolDetail p={p} intl={intl} />}
+
+          {kind === "station" && byMetric.size > 0 && (
             <section className="rs" id="report-results">
-              <h2>{kind === "school" ? "Exam results" : "Passenger numbers"}</h2>
+              <h2>Passenger numbers</h2>
               <div className="metrics">
                 {[...byMetric.entries()].map(([id, e]) => {
                   const last = e.pts[e.pts.length - 1];
-                  return <Metric key={id} name={e.name} value={fmtNumber(last.y, intl, Math.abs(last.y) < 10 ? 2 : 0)} note={e.pts.length > 1 ? `${e.pts.map((x) => `${x.x.slice(0, 4)}: ${fmtNumber(x.y, intl, Math.abs(x.y) < 10 ? 2 : 0)}`).join(" · ")}` : undefined} src={`${kind === "school" ? "DfE school performance tables" : "ORR estimates of station usage"}, ${last.x.slice(0, 4)}`} />;
+                  return <Metric key={id} name={e.name} value={fmtNumber(last.y, intl, Math.abs(last.y) < 10 ? 2 : 0)} note={e.pts.length > 1 ? `${e.pts.map((x) => `${x.x.slice(0, 4)}: ${fmtNumber(x.y, intl, Math.abs(x.y) < 10 ? 2 : 0)}`).join(" · ")}` : undefined} src={`ORR estimates of station usage, ${last.x.slice(0, 4)}`} />;
                 })}
               </div>
               {kind === "station" && [...byMetric.values()][0]?.pts.length > 2 && (

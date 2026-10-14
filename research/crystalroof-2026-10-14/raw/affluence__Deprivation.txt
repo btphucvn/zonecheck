@@ -1,0 +1,78 @@
+Household Income
+Deprivation
+Occupation
+Qualification
+Type: Index of Multiple Deprivation
+Legend
+ Leaflet | © OpenStreetMap contributors
+Affluence on map, Adys Road, London, SE15 4DX
+UK
+England
+London
+Southwark
+Rye Lane
+SE15 4DX
+Deprivation in Adys Road, London, SE15 4DX
+
+Deprivation in your local area can be rated as 5 out of 10 or medium.
+
+Index of multiple deprivation
+
+5/10
+
+Index of multiple deprivation (IMD) is an aggregated index showing how well-off or disadvantaged an area is.
+
+It takes into account the following domains:
+
+Deprivation domains
+Income Deprivation 
+5/10
+
+This measures the proportion of the population experiencing deprivation relating to low income. The definition of low income used includes both those people that are out-of-work, and those that are in work but who have low earnings (and who satisfy the respective means tests).
+
+Read more
+Crime 
+5/10
+
+This measures the risk of personal and material victimisation at local level.
+
+Read more
+Employment Deprivation 
+5/10
+
+This measures the proportion of the working age population in an area involuntarily excluded from the labour market. This includes people who would like to work but are unable to do so due to unemployment, sickness or disability, or caring responsibilities.
+
+Read more
+Education, Skills and Training Deprivation 2/10
+
+This measures the lack of attainment and skills in the local population. The indicators fall into two sub-domains: one relating to children and young people (3/10) and one relating to adult skills (1/10).
+
+Read more
+Health Deprivation and Disability 6/10
+
+This measures the risk of premature death and the impairment of quality of life through poor physical or mental health. The domain measures morbidity, disability and premature mortality but not aspects of behaviour or environment that may be predictive of future health deprivation.
+
+Read more
+Barriers to Housing and Services 6/10
+
+This measures the physical and financial accessibility of housing and local services. The indicators fall into two sub-domains: geographical barriers (1/10), which relate to the physical proximity of local services, and wider barriers (9/10) which includes issues relating to access to housing such as affordability and homelessness.
+
+Read more
+Living Environment Deprivation 10/10
+
+This measures the quality of the local environment. The indicators fall into two sub-domains. The indoors (9/10) living environment measures the quality of housing; while the outdoors (10/10) living environment contains measures of air quality and road traffic accidents.
+
+Read more
+Explore occupations in nearby locations
+Occupations in Ashleigh Mews, London, SE15 4BF
+Occupations in Adys Road, London, SE15 4DZ
+Occupations in Muschamp Road, London, SE15 4EG
+Occupations in Oglander Road, London, SE15 4EQ
+Occupations in Amott Road, London, SE15 4JD
+Occupations in Nutbrook Street, London, SE15 4LE
+Occupations in Maxted Road, London, SE15 4LF
+
+Data source: Office for National Statistics
+
+2025
+

@@ -1,0 +1,106 @@
+For Individuals
+
+Go to For Businesses
+Review your area
+Find Mortgage Broker
+Pricing
+MR
+Location intelligence
+API Pricing
+
+Try any plan free for 7 days or 100 credits, whichever comes first.
+No contract - cancel anytime.
+
+Monthly
+Annually · save 15%
+API documentation
+Max credits / mo	Calls / 10 sec	Price	
+
+2,000
+	20	£25/mo	Start free trial
+
+5,000
+	20	£45/mo	Start free trial
+
+10,000
+POPULAR	30	£75/mo	Start free trial
+
+30,000
+	30	£145/mo	Start free trial
+
+50,000
+	50	£180/mo	Start free trial
+
+100,000
+	50	£265/mo	Start free trial
+
+300,000
+	80	£520/mo	Start free trial
+
+600,000
+	200	£1,000/mo	Start free trial
+
+1,200,000
+	450	£2,000/mo	Start free trial
+Locations
+2.6M
+covers every residential postcode across England and Wales
+Data points
+100+
+get access to in-depth neighbourhood information
+Specific
+100%
+we provide postcode-level data unique to a property or a postcode
+Highly affordable
+£0.0014
+prices start at as low as 0.14p for a data point
+Millions of home-movers love
+Crystal Roof
+
+Now you can elevate your products with our powerful location intelligence API
+
+API documentation
+Estate agents
+Proptech
+Marketing
+Research & Consulting
+Location intelligence taken to the next level
+
+Designed for the most demanding workloads
+
+Insightful data for your project
+Is 35 crimes per 1000 people much or little? Exactly!
+Raw numbers say nothing. That's why we've introduced relative ratings, making it simple to compare different areas.
+Top data points
+Crime
+absolute and relative rating
+Demographics
+74 data points
+Deprivation
+Green spaces
+Household income
+Noise
+disturbances
+Retail amenities
+Schools
+New
+rich data
+Transport
++ 99 data points
+Data You Can Trust
+Sourced from the most reputable resources
+Always up-to-date
+Contact us contact@crystalroof.co.uk
+About
+All transport stations
+All postcodes in London
+All postcodes in the UK
+Privacy Policy
+Terms & Conditions
+API Overview & Pricing
+API Documentation
+Widgets for property websites
+
+© 2026 CrystalRoof, Ltd. 
+
+All rights reserved.

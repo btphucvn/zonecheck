@@ -623,7 +623,7 @@ export function Nearby({ h }: { h: H }) {
       <div className="nearby">
         {r.nearby.map((n) => (
           <Link key={n.id} href={`/uk/${uk.segmentForLevel(n.level)}/${n.slug}`}>
-            <b>{n.level === "town" || n.level === "lad" || n.level === "region" ? n.name : n.code}</b>
+            <b>{n.level === "town" || n.level === "ward" || n.level === "lad" || n.level === "region" ? n.name : n.code}</b>
             <span>{n.price ? tpl(t.report.nearby.median, { p: fmtMoneyShort(n.price, "GBP", intl) }) : n.displayName ?? ""}</span>
             {n.crime != null && <><br /><span>{fmtNumber(n.crime, intl)} crimes / 1,000</span></>}
           </Link>

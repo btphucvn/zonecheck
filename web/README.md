@@ -20,7 +20,11 @@ Qua tunnel, mỗi truy vấn tốn khoảng 0,4–0,5 giây, nên lần mở đ�
 |---|---|
 | `/` | Tìm kiếm, chọn vai trò, khu phổ biến, công cụ, xếp hạng |
 | `/uk/{postcode,sector,district,town,area,region}/{slug}` | Báo cáo khu vực: điểm theo vai trò, bản đồ, 15 section (có "Flood and ground risk" và checklist "Before you make an offer") |
-| `/uk/school/{urn-slug}`, `/uk/station/{crs-slug}` | Trang trường học (Ofsted, kết quả thi) và trang ga |
+| `/uk/{level}/{slug}/{topic}[/{tab}]` | Trang chủ đề; `affluence` (income, deprivation, occupation, qualification) và `people` (ethnicity, religion, age, households, background) có tab con với URL riêng |
+| `/uk/ward/{slug}` | Ward bầu cử (slug "tên-ward-tên-lad") |
+| `/uk/school/{urn-slug}`, `/uk/station/{crs-slug}` | Trang trường (Ofsted, học sinh, thi, môn, tuyển sinh, sĩ số, nơi đi tiếp, kèm TB LA/England) và trang ga |
+| `/uk/valuation?postcode=&a=` | Định giá tức thì (EPC × £/m² giao dịch so sánh, HPI) |
+| `/uk/review/new` | Form review cư dân → `POST /api/reviews` (cần `REVIEW_DATABASE_URL`) |
 | `/uk/compare?a=sector:se15-4&b=…` | So sánh tối đa 4 khu |
 | `/uk/where-to-live?who=family&in=region:london&max=500000&flood=1` | Tìm ngược: xếp sector/district theo điểm vai trò (`core.area_overall_score`), lọc vùng, ngân sách, lũ, tội phạm, ga |
 | `/uk/rankings`, `/uk/rankings/{metric}/{england-and-wales\|lad-slug}` | Xếp hạng |

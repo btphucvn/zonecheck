@@ -9,6 +9,7 @@
   "nav": {
     "rankings": "Rankings",
     "calculators": "Calculators",
+    "valuation": "Valuation",
     "compare": "Compare",
     "searchLabel": "Search a postcode, town or school",
     "searchPlaceholder": "Postcode, town or school",
@@ -87,6 +88,7 @@
     "sector": "Postcode sector",
     "district": "Postcode district",
     "town": "Town or place",
+    "ward": "Ward",
     "lad": "Local authority",
     "region": "Region",
     "lsoa": "Neighbourhood"
@@ -96,6 +98,7 @@
     "sectors": "postcode sectors",
     "districts": "postcode districts",
     "towns": "towns and places",
+    "wards": "wards",
     "lads": "local authorities",
     "regions": "regions"
   },
@@ -183,6 +186,7 @@
       "sector": "Postcode sector in {place}",
       "district": "Postcode district around {place}",
       "town": "{type} in {place}",
+      "ward": "Electoral ward in {place}",
       "lad": "Local authority in {place}",
       "region": "Region of {place}"
     },
@@ -561,7 +565,8 @@
         "amenities": "Amenities",
         "environment": "Environment",
         "connectivity": "Broadband",
-        "people": "People",
+        "affluence": "Affluence",
+        "people": "Demographics",
         "energy": "Energy",
         "planning": "Planning",
         "costs": "Costs"

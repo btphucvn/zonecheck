@@ -1,8 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { fmtDistance, fmtMoney, fmtNumber, fmtPct, walkMinutes } from "@/lib/format";
-import type { CrimeDetail } from "@/server/crime";
-import type { AmenityKind, GpCard, ListedRow, NeighbourValue, SchoolRow } from "@/server/topic";
+import type { CrimeDetail, CrimeHistory, WardCrime } from "@/server/crime";
+import type { PointExtras } from "@/server/point";
+import { CrimePeriods } from "./CrimePeriods";
+import { SchoolTable } from "./SchoolTable";
+import type { AmenityKind, GpCard, ListedRow, NeighbourValue, PlanningApp, SchoolRow } from "@/server/topic";
 import { AreaMap, type LayerKey } from "../AreaMap";
 import { CrimeMap } from "../CrimeMap";
 import { MetricMap, type MapMetric } from "../MetricMap";
@@ -13,15 +16,20 @@ import * as S from "../sections";
 import { Block, DotRows, Facts, ShareRows, compareShares } from "./blocks";
 import { crimeModel, decileOf, monthLabel, rampOf } from "./crimeModel";
 import { NextDoor, Ruler, verdictFor, type Fmt, type Mark } from "./Shell";
+import { AFFLUENCE_TABS, affluence } from "./affluence";
+import { PEOPLE_TABS, people } from "./demographics";
 
 // What each topic page shows: its map, the key figure for the ruler and the verdict, and the
 // evidence. Topics reuse the report section as their core and add the detail behind it.
 
 export interface TopicData {
   h: H; name: string; base: string;
-  crime?: CrimeDetail | null; neighbours?: NeighbourValue[]; hpi?: { period: string; v: number }[];
+  /** sub-tab of the topic page (null = the first tab, shown at the topic's own URL) */
+  tab: string | null;
+  crime?: CrimeDetail | null; history?: CrimeHistory | null; wards?: WardCrime[]; point?: PointExtras; neighbours?: NeighbourValue[]; hpi?: { period: string; v: number }[];
   schools?: SchoolRow[]; amenities?: { kinds: AmenityKind[]; gps: GpCard[] };
   planning?: { listed: ListedRow[]; listedTotal: number; brownfield: number };
+  apps?: { total: number; recent: PlanningApp[] } | null;
 }
 
 export interface TopicView {
@@ -33,13 +41,14 @@ export interface TopicView {
 export const NEIGHBOUR_METRIC: Record<string, string> = {
   crime: "uk.crime.total_rate", prices: "uk.price.median", schools: "uk.schools.primary_quality", transport: "uk.access.rail_dist_m",
   amenities: "uk.access.gp_dist_m", environment: "uk.pcm.no2", broadband: "uk.bb.gigabit_pct", people: "uk.iod25.imd_decile",
+  affluence: "uk.iod25.income_decile",
 };
 
 /* ------------------------------------------------------------ shared pieces */
 
-const flat = (node: ReactNode) => <div className="tp-flat">{node}</div>;
+export const flat = (node: ReactNode) => <div className="tp-flat">{node}</div>;
 
-function mapBase(d: TopicData) {
+export function mapBase(d: TopicData) {
   const { r } = d.h;
   const unit = r.head.level === "postcode_unit";
   return {
@@ -48,11 +57,11 @@ function mapBase(d: TopicData) {
   };
 }
 
-function metricMap(d: TopicData, metrics: MapMetric[]) {
+export function metricMap(d: TopicData, metrics: MapMetric[]) {
   return <MetricMap {...mapBase(d)} metrics={metrics} />;
 }
 
-function areaMap(d: TopicData, layers: Partial<Record<LayerKey, boolean>>) {
+export function areaMap(d: TopicData, layers: Partial<Record<LayerKey, boolean>>) {
   const b = mapBase(d);
   const lv = d.h.r.head.level;
   return (
@@ -64,7 +73,7 @@ function areaMap(d: TopicData, layers: Partial<Record<LayerKey, boolean>>) {
 }
 
 /** Ruler for one metric: this area against its local authority and nation. */
-function keyRuler(d: TopicData, id: string, fmt: Fmt, caption: string, refLine?: { x: number; label: string }, cap?: number) {
+export function keyRuler(d: TopicData, id: string, fmt: Fmt, caption: string, refLine?: { x: number; label: string }, cap?: number) {
   const { r } = d.h;
   const here = val(r.metrics, id), lad = val(r.ladMetrics, id), nat = val(r.nationMetrics, id);
   if (here == null || (lad == null && nat == null)) return undefined;
@@ -76,7 +85,7 @@ function keyRuler(d: TopicData, id: string, fmt: Fmt, caption: string, refLine?:
   return <Ruler marks={marks} nearby={nearby} fmt={fmt} caption={caption} refLine={refLine} cap={cap ?? (fmt === pct0 ? 100 : undefined)} />;
 }
 
-function keyVerdict(d: TopicData, id: string, words: [string, string], dir: -1 | 0 | 1) {
+export function keyVerdict(d: TopicData, id: string, words: [string, string], dir: -1 | 0 | 1) {
   const { r } = d.h;
   const here = val(r.metrics, id);
   if (here == null) return "";
@@ -87,25 +96,38 @@ function keyVerdict(d: TopicData, id: string, words: [string, string], dir: -1 |
   });
 }
 
-function nextDoor(d: TopicData, fmt: Fmt, dir: -1 | 0 | 1, caption: string) {
+export function nextDoor(d: TopicData, fmt: Fmt, dir: -1 | 0 | 1, caption: string) {
   return <NextDoor items={d.neighbours ?? []} own={d.h.r.ctx.dataArea.code} fmt={fmt} dir={dir} caption={caption} />;
 }
 
 const money = (d: TopicData) => (v: number) => fmtMoney(v, "GBP", d.h.intl);
-const moneyShort = (v: number) => (v >= 1e6 ? `£${(v / 1e6).toFixed(1)}m` : v >= 1e4 ? `£${Math.round(v / 1e3)}k` : `£${Math.round(v).toLocaleString("en-GB")}`);
-const pct0 = (v: number) => `${Math.round(v)}%`;
+export const moneyShort = (v: number) => (v >= 1e6 ? `£${(v / 1e6).toFixed(1)}m` : v >= 1e4 ? `£${Math.round(v / 1e3)}k` : `£${Math.round(v).toLocaleString("en-GB")}`);
+export const pct0 = (v: number) => `${Math.round(v)}%`;
 /** Fewer crimes than this in a row and its rate swings with a single incident. */
 const FEW = 5;
 
 /** What an area is ranked against nationally, by the level its figures come from. */
-const PEERS: Record<string, string> = {
+export const PEERS: Record<string, string> = {
   lsoa: "neighbourhoods", msoa: "neighbourhood groups (MSOAs)", sector: "postcode sectors", district: "postcode districts",
   postal_area: "postcode areas", town: "towns", lad: "local authorities", region: "regions",
 };
-const lad = (d: TopicData) => (d.h.r.ctx.lad && d.h.r.ctx.lad.id !== d.h.r.ctx.dataArea.id ? d.h.r.ctx.lad.name : null);
-const j = (map: H["r"]["metrics"], id: string) => mv(map, id)?.j;
+export const lad = (d: TopicData) => (d.h.r.ctx.lad && d.h.r.ctx.lad.id !== d.h.r.ctx.dataArea.id ? d.h.r.ctx.lad.name : null);
+export const j = (map: H["r"]["metrics"], id: string) => mv(map, id)?.j;
 
 /* ------------------------------------------------------------ crime */
+
+/** "falls from 95.8 in 2011 to 57.2 by 2017, then climbs to 92.8 by 2025": first year, the turning point
+ *  (lowest or highest year in between, when it differs clearly from both ends) and the latest year. */
+function describeTrend(name: string, pts: { year: number; rate: number }[], f: (x: number) => string): string {
+  if (pts.length < 3) return "";
+  const a = pts[0], z = pts[pts.length - 1];
+  const mid = pts.slice(1, -1);
+  const lo = mid.reduce((m, p) => (p.rate < m.rate ? p : m)), hi = mid.reduce((m, p) => (p.rate > m.rate ? p : m));
+  const verb = (from: number, to: number) => (to > from * 1.05 ? "climbs" : to < from * 0.95 ? "falls" : "holds steady");
+  const turn = lo.rate < Math.min(a.rate, z.rate) * 0.9 ? lo : hi.rate > Math.max(a.rate, z.rate) * 1.1 ? hi : null;
+  if (!turn) return `In ${name}, the rate ${verb(a.rate, z.rate)} from ${f(a.rate)} in ${a.year} to ${f(z.rate)} by ${z.year}.`;
+  return `In ${name}, the rate ${verb(a.rate, turn.rate)} from ${f(a.rate)} in ${a.year} to ${f(turn.rate)} by ${turn.year}, then ${verb(turn.rate, z.rate)} to ${f(z.rate)} by ${z.year}.`;
+}
 
 function crime(d: TopicData): TopicView | null {
   const { r, intl } = d.h;
@@ -138,6 +160,22 @@ function crime(d: TopicData): TopicView | null {
     ruler: keyRuler(d, "uk.crime.total_rate", (x) => fmtNumber(x, intl, 0), "Crimes per 1,000 residents a year"),
     main: (
       <>
+        {m.p != null && (() => {
+          // Plain-English summary from the same figures as the tables below (national scores out of 10).
+          const lvl = decileOf(m.p);
+          const word = lvl >= 8 ? "a high" : lvl >= 4 ? "a moderate" : "a low";
+          const top = m.rows.filter((x) => x.k !== "Anti-social behaviour" && x.p != null && decileOf(x.p) >= 7 && x.n >= FEW).sort((a, b) => b.p! - a.p!).slice(0, 4);
+          const volume = m.rows.filter((x) => x.n > 0).slice(0, 3);
+          const ladLvl = mv(r.ladMetrics, "uk.crime.total_rate")?.p;
+          return (
+            <Block id="safe" title={`Is ${d.name} a safe place to live?`}>
+              <p>Based on police-recorded crime, {d.name} has {word} crime rate: {n1(m.rate)} crimes per 1,000 residents a year, a score of {lvl}/10 against all {peers} in England and Wales.</p>
+              {top.length > 0 && <p>{top.map((x) => `${x.label} (${decileOf(x.p!)}/10)`).join(", ").replace(/, ([^,]*)$/, " and $1")} stand out as the highest-scoring crime types compared with other areas.</p>}
+              {volume.length > 0 && <p>The most common by volume {volume.length > 1 ? "are" : "is"} {volume.map((x) => `${x.label.toLowerCase()} (${n1(x.rate)} per 1,000${x.p != null ? `, ${decileOf(x.p)}/10` : ""})`).join(", ").replace(/, ([^,]*)$/, " and $1")}. A crime type can be common everywhere and still score low here.</p>}
+              {m.lad && ladLvl != null && <p>{m.lad} as a whole records {n1(m.ladRate ?? 0)} crimes per 1,000 residents, a score of {decileOf(ladLvl)}/10 among local authorities.</p>}
+            </Block>
+          );
+        })()}
         <Block id="types" title="What gets reported" note={<>Crimes recorded over the last 12 months, by type. Rates are crimes per 1,000 residents, so a small neighbourhood and a whole borough compare fairly; further right means more crime. Red: clearly above {m.lad ?? "the borough"}; green: clearly below. &ldquo;Crimes&rdquo; is the actual number recorded here; faded rows have fewer than {FEW}, so one crime more or less moves the rate a lot.{m.rows.some((x) => x.p != null) && <> &ldquo;Nationally&rdquo; ranks the rate against all {peers} in England and Wales: 1/10 is the tenth with the least of that crime, 10/10 the tenth with the most.{m.lad ? ` The line under it ranks ${m.lad} among all local authorities.` : ""}</>}</>}>
           <DotRows rows={m.rows.map((x) => ({ k: x.k, label: x.label, here: x.rate, other: x.ladRate, extra: n0(x.n), rank: rank(x.p, x.ladP), faint: x.n < FEW }))} fmt={n1} highIs="bad"
             head={{ unit: "Per 1,000 residents", here: "This area", other: m.lad ?? "Borough", extra: "Crimes", rank: "Nationally" }} />
@@ -172,6 +210,45 @@ function crime(d: TopicData): TopicView | null {
     ),
     side: (
       <>
+        {d.crime?.area && (
+          <Block id="periods" title="By time period" note="Switch between the last month, three months, six months and year. Short windows swing with a handful of crimes.">
+            <CrimePeriods lastLabel={monthLabel(m.last)} ladName={m.lad}
+              data={{ m1: d.crime.area.windows.m1, m3: d.crime.area.windows.m3, m6: d.crime.area.windows.m6, m12: d.crime.area.last12, pop: d.crime.area.pop,
+                      ladM: d.crime.lad ? { m1: d.crime.lad.windows.m1, m3: d.crime.lad.windows.m3, m6: d.crime.lad.windows.m6, m12: d.crime.lad.last12 } : null,
+                      ladPop: d.crime.lad?.pop ?? null }} />
+          </Block>
+        )}
+        {(d.wards?.length ?? 0) > 1 && (() => {
+          const w = d.wards!;
+          const safest = [...w].reverse().slice(0, 3), worst = w.slice(0, 3);
+          const sc = (p: number | null) => (p == null ? "" : ` (${decileOf(p)}/10)`);
+          return (
+            <Block id="wards" title="Crime by ward" note={`Crimes per 1,000 residents in the last 12 months for each of the ${w.length} wards in ${d.name}, highest first. Scores rank each ward against all wards in England and Wales.`}>
+              <p className="tp-note">Safest wards: {safest.map((x) => `${x.name}${sc(x.p)}`).join(", ")}. Least safe: {worst.map((x) => `${x.name}${sc(x.p)}`).join(", ")}.</p>
+              <table className="data cmp">
+                <thead><tr><th scope="col">Ward</th><th scope="col">Crimes per 1,000</th><th scope="col">Score</th></tr></thead>
+                <tbody>{w.map((x) => <tr key={x.slug}><th scope="row"><Link href={`/uk/ward/${x.slug}/crime`}>{x.name}</Link></th><td>{fmtNumber(x.rate, intl, 1)}</td><td>{x.p != null ? `${decileOf(x.p)}/10` : "–"}</td></tr>)}</tbody>
+              </table>
+            </Block>
+          );
+        })()}
+        {d.history && d.history.series[0].points.length > 2 && (() => {
+          const hs = d.history.series;
+          const y0 = hs[0].points[0].year, y1 = hs[0].points[hs[0].points.length - 1].year;
+          return (
+            <Block id="history" title={`Crime rate trends ${y0}–${y1}`} note="Crimes per 1,000 residents a year, anti-social behaviour excluded. Years when a police force did not send all 12 months are left out (Greater Manchester Police has published no data since mid-2019).">
+              <LineChart series={hs.map((s, i) => ({ label: s.label, dashed: i > 0, points: s.points.map((p) => ({ x: String(p.year), y: p.rate })) }))} format={(x) => n0(x)} ariaLabel="Crime rate per 1,000 residents by year" height={220} />
+              {hs.map((s) => <p key={s.label} className="tp-note">{describeTrend(s.label, s.points, n1)}</p>)}
+              {d.history.types.length > 0 && (
+                <>
+                  <h3 className="sub-h">High-harm crime</h3>
+                  <LineChart series={d.history.types.map((s) => ({ label: s.label, points: s.points.map((p) => ({ x: String(p.year), y: p.rate })) }))} format={(x) => n1(x)} ariaLabel="High-harm crime rates by year" height={200} />
+                  {d.history.types.map((s) => <p key={s.label} className="tp-note">{describeTrend(s.label.toLowerCase(), s.points, n1).replace(/^In /, "For ")}</p>)}
+                </>
+              )}
+            </Block>
+          );
+        })()}
         <Block id="trend" title="Year on year" note={<>{m.change != null ? `${Math.abs(m.change) < 1 ? "Flat" : m.change > 0 ? `Up ${n0(m.change)}%` : `Down ${n0(-m.change)}%`} on the previous 12 months. ` : ""}Rolling three-month rate per 1,000 a year, anti-social behaviour excluded.</>}>
           <LineChart series={m.trend.map((s, i) => ({ ...s, dashed: i > 0 }))} format={(x) => n0(x)} ariaLabel="Crime rate by quarter" height={200} />
         </Block>
@@ -317,8 +394,6 @@ function risk(d: TopicData): TopicView {
 function schools(d: TopicData): TopicView {
   const { r, intl, t } = d.h;
   const list = d.schools ?? [];
-  const phase = (x: string) => ({ "school.primary": "Primary", "school.secondary": "Secondary", "school.all_through": "All-through", "school.special": "Special", "school.post16": "16 plus" })[x] ?? x;
-  const ofsted = (x: SchoolRow["rating"]) => !x ? <span className="m-src">Not rated</span> : <span className={`ofsted r${x.rank ?? 0}`}>{x.label}</span>;
   const good = list.filter((s) => s.rating?.rank != null && s.rating.rank <= 2).length;
   return {
     title: `Schools near ${d.name}`,
@@ -330,28 +405,8 @@ function schools(d: TopicData): TopicView {
     main: (
       <>
         {list.length > 0 && (
-          <Block id="list" title="Every school within 3 km" note="Results: KS2 share meeting the expected standard (primary), Attainment 8 and Progress 8 (secondary). Offers: share of first-choice applicants offered a place.">
-            <div className="scroll-x">
-              <table className="data tp-schools">
-                <thead><tr><th>School</th><th>Ofsted</th><th className="r">Results</th><th className="r">Offers</th><th className="r">Pupils</th><th className="r">FSM</th><th className="r">Distance</th></tr></thead>
-                <tbody>
-                  {list.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        {s.slug ? <Link href={`/uk/school/${s.slug}`}>{s.name}</Link> : s.name}
-                        <span className="m-src">{[phase(s.type), s.ages ? `ages ${s.ages}` : null, s.kind, s.gender && s.gender !== "Mixed" ? s.gender : null, s.religion, s.admissions === "Selective" ? "Selective" : null].filter(Boolean).join(", ")}</span>
-                      </td>
-                      <td>{ofsted(s.rating)}</td>
-                      <td className="r num">{s.ks2 != null ? `${fmtNumber(s.ks2, intl)}%` : s.a8 != null ? <>A8 {fmtNumber(s.a8, intl, 1)}{s.p8 != null ? <span className="m-src">P8 {s.p8 > 0 ? "+" : ""}{fmtNumber(s.p8, intl, 2)}</span> : null}</> : "–"}</td>
-                      <td className="r num">{s.offerRate != null ? `${fmtNumber(s.offerRate, intl)}%` : "–"}</td>
-                      <td className="r num">{s.pupils != null ? fmtNumber(s.pupils, intl) : "–"}{s.capacity ? <span className="m-src">of {fmtNumber(s.capacity, intl)}</span> : null}</td>
-                      <td className="r num">{s.fsm != null ? `${fmtNumber(s.fsm, intl)}%` : "–"}</td>
-                      <td className="r num">{fmtDistance(s.dist, intl)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <Block id="list" title="Schools within 3 km" note="Filter by phase, Ofsted grade, faith, gender, funding or admissions. Results: KS2 share meeting the expected standard (primary), Attainment 8 and Progress 8 (secondary). Offers: share of first-choice applicants offered a place.">
+            <SchoolTable rows={list} intl={intl} />
           </Block>
         )}
         {r.nurseries.length > 0 && (
@@ -413,6 +468,8 @@ function transport(d: TopicData): TopicView {
           { k: "Bus stops within 500 m", v: val(r.metrics, "uk.access.bus_stops_500m") != null ? `${fmtNumber(val(r.metrics, "uk.access.bus_stops_500m")!, intl)} stops` : null },
           { k: "Nearest station", v: first ? fmtDistance(first.dist, intl) : null, note: first?.name },
           { k: "Travel zone", v: first?.attrs.tfl_zone ?? null },
+          { k: "PTAL at this address", v: d.point?.ptal ? d.point.ptal.band : null, note: d.point?.ptal ? `TfL public transport accessibility, 0 (worst) to 6b (best); index ${fmtNumber(d.point.ptal.ai, intl, 1)}` : undefined },
+          { k: "Station operator", v: first?.attrs.operator ?? null, note: first?.attrs.main_destination ? `Most journeys go to or from ${first.attrs.main_destination}` : undefined },
         ]} />
         {dist.length > 0 && <Block id="dist" title="Distance to work" note="How far working residents travel to their workplace. Census 2021."><ShareRows rows={dist} other={lad(d) ?? "Local authority"} unit="% of workers" /></Block>}
         {cars.length > 0 && <Block id="cars" title="Cars or vans per household" note="Census 2021."><ShareRows rows={cars} other={lad(d) ?? "Local authority"} unit="% of households" /></Block>}
@@ -517,6 +574,31 @@ function environment(d: TopicData): TopicView {
             </table>
           </div>
         </Block>
+        {d.point?.air && (
+          <Block id="street-air" title="At street level (London model)" note="London Atmospheric Emissions Inventory 2022: modelled on a 20 m grid, averaged over about 60 m around this postcode. Busy roads raise the figure sharply within a few metres.">
+            <table className="data">
+              <thead><tr><th>Pollutant</th><th className="r">Here</th><th className="r">WHO</th><th className="r">UK limit</th></tr></thead>
+              <tbody>
+                {([["Nitrogen dioxide NO₂", d.point.air.no2, 10, 40], ["Particles PM10", d.point.air.pm10, 15, 40], ["Fine particles PM2.5", d.point.air.pm25, 5, 20]] as const).map(([label, v, who, uk]) => v == null ? null : (
+                  <tr key={label}><td>{label}</td><td className={`r num ${v > who ? "tp-over" : "tp-under"}`}>{ug(v)}</td><td className="r num">{who}</td><td className="r num">{uk}</td></tr>
+                ))}
+                {d.point.air.pm10Days != null && <tr><td>Days with PM10 over 50 µg/m³<span className="m-src">daily limit, 35 days a year allowed</span></td><td className={`r num ${d.point.air.pm10Days > 3 ? "tp-over" : "tp-under"}`}>{fmtNumber(d.point.air.pm10Days, intl, 0)}</td><td className="r num">3</td><td className="r num">35</td></tr>}
+              </tbody>
+            </table>
+          </Block>
+        )}
+        {d.point && (d.point.roads.length > 0 || d.point.noise.length > 0) && (
+          <Block id="noise-sources" title="Sources of noise nearby" note="Nearest motorway, A and B roads (OS Open Roads); fire, ambulance and A&E sites within 0.3 miles; pubs, bars and nightclubs within 0.1 miles (OpenStreetMap, NHS).">
+            <ul className="tp-list">
+              {d.point.roads.filter((x) => x.dist <= 2000).map((x) => (
+                <li key={x.cls}><span>{x.cls === "Motorway" ? "Motorway" : x.cls}{x.number ? ` ${x.number}` : ""}{x.name ? <span className="m-src"> {x.name}</span> : null}</span><b>{fmtDistance(x.dist, intl)}</b></li>
+              ))}
+              {d.point.noise.map((x, i) => (
+                <li key={x.kind + i}><span>{{ fire: "Fire station", ambulance: "Ambulance station", ae: "Hospital with A&E", hospital: "Hospital", pub: "Pub or bar", club: "Nightclub" }[x.kind]}<span className="m-src"> {x.name}</span></span><b>{fmtDistance(x.dist, intl)}</b></li>
+              ))}
+            </ul>
+          </Block>
+        )}
         {flat(<S.Environment h={d.h} />)}
       </>
     ),
@@ -557,85 +639,6 @@ function broadband(d: TopicData): TopicView {
     ),
     after: nextDoor(d, pct0, 1, "Premises able to get gigabit broadband."),
     source: "Source: Ofcom Connected Nations.",
-  };
-}
-
-/* ------------------------------------------------------------ people */
-
-const IOD: [string, string][] = [
-  ["imd", "Overall"], ["income", "Income"], ["employment", "Employment"], ["education", "Education and skills"], ["health", "Health"],
-  ["crime", "Crime"], ["barriers", "Housing and services"], ["living_env", "Living environment"], ["idaci", "Children in low-income homes"], ["idaopi", "Older people in low-income homes"],
-];
-
-function people(d: TopicData): TopicView {
-  const { r } = d.h;
-  const england = r.ctx.nation?.code?.startsWith("E");
-  const cmp = (id: string, opts: Parameters<typeof compareShares>[2] = {}) => compareShares(j(r.metrics, id), j(r.ladMetrics, id), opts);
-  const work = cmp("uk.census21.ts066", { top: 7 });
-  const jobs = cmp("uk.census21.ts063", { rename: (k) => k.replace(/^\d+\.\s*/, "") });
-  const homes = cmp("uk.census21.ts003", { top: 7 });
-  const health = cmp("uk.census21.ts037");
-  const born = cmp("uk.census21.ts004", { top: 6 });
-  const ethnic = cmp("uk.census21.ts021", { top: 8 });
-  const religion = cmp("uk.census21.ts030", { top: 7 });
-  const share = (title: string, id: string, rows: ReturnType<typeof cmp>, note?: string, unit = "% of residents") => rows.length > 0 && (
-    <Block id={id} title={title} note={note ?? `Share of residents in each group, here and in ${lad(d) ?? "the local authority"}. Census 2021.`}><ShareRows rows={rows} other={lad(d) ?? "Local authority"} unit={unit} /></Block>
-  );
-  return {
-    title: `People and affluence in ${d.name}`,
-    description: `Who lives in ${d.name}: income, deprivation in detail, jobs, households, health and background from Census 2021 and the Indices of Deprivation, compared with ${lad(d) ?? "the local authority"}.`,
-    verdict: keyVerdict(d, "uk.income.net", ["Higher household incomes", "Lower household incomes"], 1),
-    dek: "Census 2021 and the Indices of Deprivation describe the neighbourhood as a whole, not any one household. None of the background figures feed a score.",
-    map: england ? metricMap(d, [
-      { id: "uk.iod25.imd_decile", label: "Deprivation decile (10 = least deprived)", fmt: "decile", dir: 1 },
-      { id: "uk.iod25.income_decile", label: "Income decile", fmt: "decile", dir: 1 },
-      { id: "uk.iod25.education_decile", label: "Education decile", fmt: "decile", dir: 1 },
-      { id: "uk.iod25.health_decile", label: "Health decile", fmt: "decile", dir: 1 },
-      { id: "uk.iod25.living_env_decile", label: "Living environment decile", fmt: "decile", dir: 1 },
-    ]) : areaMap(d, {}),
-    ruler: keyRuler(d, "uk.income.net", moneyShort, "Average household income after tax, a year"),
-    main: (
-      <>
-        {england && (
-          <Block id="iod" title="Deprivation in detail" note="English Indices of Deprivation 2025. Decile 1 is the most deprived tenth of neighbourhoods in England, 10 the least.">
-            <ul className="tp-deciles">
-              {IOD.map(([k, label]) => {
-                const v = val(r.metrics, `uk.iod25.${k}_decile`);
-                if (v == null) return null;
-                return (
-                  <li key={k}>
-                    <span>{label}</span>
-                    <span className="tp-dec" role="img" aria-label={`${label}: decile ${Math.round(v)} of 10`}>
-                      {Array.from({ length: 10 }, (_, i) => <i key={i} className={i + 1 === Math.round(v) ? "on" : undefined} />)}
-                    </span>
-                    <b>{Math.round(v)}</b>
-                  </li>
-                );
-              })}
-            </ul>
-          </Block>
-        )}
-        {flat(<S.People h={d.h} />)}
-        {share("Work", "work", work)}
-        {share("Jobs", "jobs", jobs, "Occupation of working residents. Census 2021.", "% of workers")}
-        {share("Households", "homes", homes, "Share of households of each kind. Census 2021.", "% of households")}
-      </>
-    ),
-    side: (
-      <>
-        <Facts items={[
-          { k: "Household income after tax", v: val(r.metrics, "uk.income.net") != null ? moneyShort(val(r.metrics, "uk.income.net")!) : null, note: "ONS small area estimate, a year" },
-          { k: "After housing costs", v: val(r.metrics, "uk.income.net_ahc") != null ? moneyShort(val(r.metrics, "uk.income.net_ahc")!) : null },
-          { k: "Before tax", v: val(r.metrics, "uk.income.total") != null ? moneyShort(val(r.metrics, "uk.income.total")!) : null },
-        ]} />
-        {share("Health", "health", health, "Self-reported general health. Census 2021.")}
-        {share("Country of birth", "born", born)}
-        {share("Ethnic group", "ethnic", ethnic)}
-        {share("Religion", "religion", religion)}
-      </>
-    ),
-    after: nextDoor(d, (x) => `D${Math.round(x)}`, 1, "Deprivation decile, 10 = least deprived."),
-    source: `Sources: Census 2021 (ONS), ${england ? "English Indices of Deprivation 2025" : "Welsh Index of Multiple Deprivation 2025"}, ONS small area income estimates.`,
   };
 }
 
@@ -696,6 +699,22 @@ function planning(d: TopicData): TopicView {
     main: (
       <>
         {flat(<S.Planning h={d.h} />)}
+        {d.apps && (
+          <Block id="applications" title="Recent planning applications nearby" note={`${d.apps.total} applications validated in the last two years within 500 m; the latest are below. Source: London Planning Datahub (GLA). Check the council's planning portal for documents and comments.`}>
+            <ul className="tp-list tp-apps">
+              {d.apps.recent.map((x, i) => (
+                <li key={(x.ref ?? "") + i}>
+                  <span>
+                    {x.url ? <a href={x.url} rel="noopener nofollow">{x.address ?? x.ref}</a> : (x.address ?? x.ref)}
+                    {x.description && <small>{x.description.length > 220 ? `${x.description.slice(0, 220)}…` : x.description}</small>}
+                    <span className="m-src">{[x.type, x.decision ?? x.status, x.validDate && `validated ${x.validDate}`].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  <b>{fmtDistance(x.dist, intl)}</b>
+                </li>
+              ))}
+            </ul>
+          </Block>
+        )}
         {p.listed.length > 0 && (
           <Block id="listed" title="Listed buildings nearby" note={`${p.listedTotal} within 500 m; the nearest are below. Grade I and II* are the most protected.`}>
             <ul className="tp-list">
@@ -740,6 +759,12 @@ function costs(d: TopicData): TopicView {
 /* ------------------------------------------------------------ registry */
 
 export const TOPICS: Record<string, (d: TopicData) => TopicView | null> = {
-  crime, prices, rent, "flood-risk": risk, schools, transport, amenities, environment, broadband, people, energy, planning, costs,
+  crime, prices, rent, "flood-risk": risk, schools, transport, amenities, environment, broadband, affluence, people, energy, planning, costs,
+};
+
+/** Sub-tabs of a topic page. The first tab is the topic's own URL; the others live at /<topic>/<tab>. */
+export const SUBTABS: Record<string, { id: string; label: string }[]> = {
+  affluence: AFFLUENCE_TABS,
+  people: PEOPLE_TABS,
 };
 

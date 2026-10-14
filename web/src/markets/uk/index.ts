@@ -6,6 +6,7 @@ export const UK_LEVELS: PageLevel[] = [
   { segment: "sector", level: "sector", labelKey: "sector", peerKey: "sectors", rank: 1 },
   { segment: "district", level: "district", labelKey: "district", peerKey: "districts", rank: 2 },
   { segment: "town", level: "town", labelKey: "town", peerKey: "towns", rank: 3 },
+  { segment: "ward", level: "ward", labelKey: "ward", peerKey: "wards", rank: 3 },
   { segment: "area", level: "lad", labelKey: "lad", peerKey: "lads", rank: 4 },
   { segment: "region", level: "region", labelKey: "region", peerKey: "regions", rank: 5 },
 ];

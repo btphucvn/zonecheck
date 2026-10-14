@@ -9,6 +9,7 @@ from datetime import date
 
 from .base import LoadContext, LoadError, Loader
 from .metrics import register_metric
+from .school_profile import write_benchmarks
 
 log = logging.getLogger(__name__)
 
@@ -18,17 +19,25 @@ DFE_METRICS = [
     ("ks2", "PTRWM_HIGH", "uk.ks2.rwm_higher_pct", "KS2: % achieving higher standard in reading, writing & maths", "percent", "%", 0, 1, 0, 100, "TELIG"),
     ("ks2", "READ_AVERAGE", "uk.ks2.reading_score", "KS2: average scaled score in reading", "number", None, 0, 1, 80, 120, "TELIG"),
     ("ks2", "MAT_AVERAGE", "uk.ks2.maths_score", "KS2: average scaled score in maths", "number", None, 0, 1, 80, 120, "TELIG"),
-    ("ks2", "READPROG", "uk.ks2.reading_progress", "KS2: reading progress score", "index", None, 1, 1, -20, 20, "TELIG"),
-    ("ks2", "WRITPROG", "uk.ks2.writing_progress", "KS2: writing progress score", "index", None, 1, 1, -20, 20, "TELIG"),
-    ("ks2", "MATPROG", "uk.ks2.maths_progress", "KS2: maths progress score", "index", None, 1, 1, -20, 20, "TELIG"),
+    ("ks2", "READPROG", "uk.ks2.reading_progress", "KS2: reading progress score", "index", None, 1, 1, -30, 30, "TELIG"),
+    ("ks2", "WRITPROG", "uk.ks2.writing_progress", "KS2: writing progress score", "index", None, 1, 1, -30, 30, "TELIG"),
+    ("ks2", "MATPROG", "uk.ks2.maths_progress", "KS2: maths progress score", "index", None, 1, 1, -30, 30, "TELIG"),
     ("ks4", "ATT8SCR", "uk.ks4.attainment8", "KS4: Attainment 8 score", "number", None, 1, 1, 0, 90, "TPUP"),
-    ("ks4", "P8MEA", "uk.ks4.progress8", "KS4: Progress 8 score", "index", None, 2, 1, -5, 5, "TPUP"),
+    ("ks4", "P8MEA", "uk.ks4.progress8", "KS4: Progress 8 score", "index", None, 2, 1, -7, 7, "TPUP"),
     ("ks4", "PTL2BASICS_94", "uk.ks4.eng_maths_4plus_pct", "KS4: % grade 4+ in English & maths", "percent", "%", 0, 1, 0, 100, "TPUP"),
     ("ks4", "PTL2BASICS_95", "uk.ks4.eng_maths_5plus_pct", "KS4: % grade 5+ in English & maths", "percent", "%", 0, 1, 0, 100, "TPUP"),
     ("ks4", "EBACCAPS", "uk.ks4.ebacc_aps", "KS4: EBacc average point score", "number", None, 2, 1, 0, 9, "TPUP"),
+    ("ks4", "PTEBACC_E_PTQ_EE", "uk.ks4.ebacc_entry_pct", "KS4: % of pupils entering the English Baccalaureate", "percent", "%", 0, 1, 0, 100, "TPUP"),
     ("ks5", "TALLPPE_ALEV_1618", "uk.ks5.alevel_aps", "16-18: average point score per A level entry", "number", None, 2, 1, 0, 60, "TPUP1618"),
+    ("ks5", "TB3PTSE", "uk.ks5.best3_aps", "16-18: average point score of best 3 A levels", "number", None, 2, 1, 0, 60, "TINCLUDE_B3"),
+    ("ks5", "PTAAB_2FAC", "uk.ks5.aab_pct", "16-18: % achieving AAB or better at A level (2+ facilitating subjects)", "percent", "%", 1, 1, 0, 100, "TINCLUDE_AAB_2FAC"),
 ]
-GRADE_COL = ("ks5", "TALLPPEGRD_ALEV_1618", "uk.ks5.alevel_grade", "16-18: average A level grade")
+GRADE_COLS = [("ks5", "TALLPPEGRD_ALEV_1618", "uk.ks5.alevel_grade", "16-18: average A level grade"),
+              ("ks5", "TB3PTSE_GRD", "uk.ks5.best3_grade", "16-18: average grade of best 3 A levels")]
+# dòng TB trong file DfE: LA (có LEA, không URN) và England trường công
+LA_RECTYPE = {"ks2": "3", "ks4": "4", "ks5": "4"}
+NAT_RECTYPE = {"ks2": "5", "ks4": "7", "ks5": "7"}
+SCHOOL_RECTYPES = {"1", "2", "3"}   # 1 trường thường, 2 trường đặc biệt/độc lập, 3 consortium 16+ (có URN)
 GRADE_RE = re.compile(r"^(A\*|[A-E])[+-]?$|^U$")
 SUPPRESSED = {"SUPP", "LOWCOV"}                       # bị ẩn do mẫu nhỏ / độ phủ thấp → is_suppressed
 NOT_AVAILABLE = {"", "NE", "NA", "NP", "NEW", "DNS", "NEWAC", "N/A", "X"}   # không có số liệu → bỏ qua
@@ -48,7 +57,7 @@ class DfePerformanceLoader(Loader):
         files = ctx.files(r"^dfe-ks\d-\d{4}-\d{4}\.csv$")
         if not files:
             raise LoadError("Không có file dfe-ks?-YYYY-YYYY.csv")
-        rows, odd, missing_cols, years = [], Counter(), {}, []
+        rows, odd, missing_cols, years, bench = [], Counter(), {}, [], []
         for path in files:
             m = re.match(r"dfe-(ks\d)-((\d{4})-(\d{4}))\.csv$", path.name)
             ks, ylabel = m.group(1), m.group(2)
@@ -63,9 +72,24 @@ class DfePerformanceLoader(Loader):
                 if absent:
                     missing_cols[f"{ylabel}/{ks}"] = absent
                 for r in rd:
-                    if (r.get("RECTYPE") or "").strip() != "1" or not (r.get("URN") or "").strip().isdigit():
-                        continue  # chỉ dòng trường (bỏ dòng LA/quốc gia)
-                    urn = r["URN"].strip()
+                    rt, urn = (r.get("RECTYPE") or "").strip(), (r.get("URN") or "").strip()
+                    if not urn.isdigit():
+                        la = (r.get("LEA") or "").strip()
+                        target = la if rt == LA_RECTYPE[ks] and la else ("ENG" if rt == NAT_RECTYPE[ks] else None)
+                        if target:
+                            for _, col, mid, *_rest in defs:
+                                raw = (r.get(col) or "").strip()
+                                try:
+                                    bench.append((target, ks, mid, period, _num(raw), None))
+                                except ValueError:
+                                    pass
+                            for gks, gcol, gmid, _ in GRADE_COLS:
+                                g = (r.get(gcol) or "").strip() if gks == ks else ""
+                                if GRADE_RE.match(g):
+                                    bench.append((target, ks, gmid, period, None, f'{{"grade": "{g}"}}'))
+                        continue
+                    if rt not in SCHOOL_RECTYPES:
+                        continue
                     for _, col, mid, *_rest in defs:
                         if col not in cols:
                             continue
@@ -81,12 +105,14 @@ class DfePerformanceLoader(Loader):
                             rows.append((urn, mid, period, _num(raw), None, size, False))
                         except ValueError:
                             odd[(col, raw)] += 1
-                    if ks == "ks5" and GRADE_COL[1] in cols:
-                        g = (r.get(GRADE_COL[1]) or "").strip()
+                    for gks, gcol, gmid, _ in GRADE_COLS:
+                        if gks != ks or gcol not in cols:
+                            continue
+                        g = (r.get(gcol) or "").strip()
                         if GRADE_RE.match(g):
-                            rows.append((urn, GRADE_COL[2], period, None, f'{{"grade": "{g}"}}', None, False))
+                            rows.append((urn, gmid, period, None, f'{{"grade": "{g}"}}', None, False))
                         elif g and g.upper() not in NOT_AVAILABLE | SUPPRESSED:
-                            odd[(GRADE_COL[1], g)] += 1
+                            odd[(gcol, g)] += 1
         zips = files
         if missing_cols:
             log.warning("    cột không có trong một số năm (chỉ số đó bỏ qua năm đó): %s", missing_cols)
@@ -100,8 +126,9 @@ class DfePerformanceLoader(Loader):
             register_metric(ctx, mid, category="education", dataset="uk.dfe.school_performance", value_type=vt,
                             unit=unit, decimals=dec, direction=direction, period_type="year", native_level=None,
                             scope="uk.england", name=name, description=f"DfE performance tables, cột {col}")
-        register_metric(ctx, GRADE_COL[2], category="education", dataset="uk.dfe.school_performance",
-                        value_type="category", period_type="year", scope="uk.england", name=GRADE_COL[3], scorable=False)
+        for _, _, gmid, gname in GRADE_COLS:
+            register_metric(ctx, gmid, category="education", dataset="uk.dfe.school_performance",
+                            value_type="category", period_type="year", scope="uk.england", name=gname, scorable=False)
         ctx.conn.execute("UPDATE core.metric SET subject = 'poi' WHERE id LIKE 'uk.ks_.%' AND subject <> 'poi'")
 
         t = ctx.stage_table("dfe_perf", PV_COLS, {"period": "date", "value_num": "float8", "value_json": "jsonb",
@@ -144,5 +171,12 @@ class DfePerformanceLoader(Loader):
                                   ON p.market_code='uk' AND p.external_scheme='urn' AND p.external_id = s.urn""")
         ctx.expect("core.poi_metric_value DfE", n_db, expected)
         ctx.drop_stage("dfe_perf")
+        # ---- TB LA / England trường công (dòng tổng trong file DfE)
+        eng = {(b[2], b[3]): b[4] for b in bench if b[0] == "ENG"}
+        a8 = eng.get(("uk.ks4.attainment8", max(r[2] for r in rows)))
+        log.info("    TB England năm mới nhất: Attainment 8 = %s, %s dòng TB LA/England", a8, len(bench))
+        if a8 is None or not 35 <= a8 <= 55 or len({b[0] for b in bench}) < 140:
+            raise LoadError(f"Dòng TB LA/England bất thường: A8 England={a8}, số LA={len({b[0] for b in bench})}")
+        nb = write_benchmarks(ctx, "bench_perf", bench, [d[2] for d in DFE_METRICS] + [g[2] for g in GRADE_COLS])
         return {"years": sorted(years), "values": n_db, "rows_parsed": n, "unmatched_urn": unmatched,
-                "odd_values": sum(odd.values())}
+                "odd_values": sum(odd.values()), "benchmarks": nb}

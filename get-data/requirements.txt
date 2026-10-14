@@ -5,3 +5,4 @@ pillow>=10
 access-parser>=0.0.6
 openpyxl>=3.1
 shapely>=2.0
+pyarrow>=15

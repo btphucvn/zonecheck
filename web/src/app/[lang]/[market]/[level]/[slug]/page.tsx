@@ -18,6 +18,11 @@ import { PrintButton, ShareButton, TocSpy } from "@/components/report/ReportClie
 import { ScorePanel, type ScoreCat } from "@/components/report/ScorePanel";
 import type { H } from "@/components/report/helpers";
 import * as S from "@/components/report/sections";
+import { DataSays } from "@/components/report/DataSays";
+import { getAreaInsights, getClassification } from "@/server/insights";
+import { getPointExtras } from "@/server/point";
+import { getAreaReviews } from "@/server/reviews";
+import { LocalsSay } from "@/components/report/LocalsSay";
 
 type Props = PageProps<"/[lang]/[market]/[level]/[slug]">;
 
@@ -88,6 +93,18 @@ async function Report({ params }: { params: Props["params"] }) {
   const h: H = { r: report, t, cat, intl, peers: t.peers[peerKey] };
   const { head, ctx } = report;
   const isPlate = PLATE_LEVELS.has(head.level);
+  const scope = head.level === "postcode_unit" ? ctx.sector : { id: head.id, code: head.code, name: head.name };
+  const oacCode = head.level === "ward" || head.level === "lad" || head.level === "postcode_unit" || head.level === "sector" || head.level === "district" ? head.code : null;
+  const oacP = oacCode ? getClassification(head.level, oacCode) : Promise.resolve(null);
+  const pointP = head.level === "postcode_unit" ? getPointExtras(head.lon, head.lat, head.code) : Promise.resolve(null);
+  const rvLevel = head.level === "postcode_unit" ? "sector" : head.level;
+  const rvCode = head.level === "postcode_unit" ? ctx.sector?.code ?? null : head.code;
+  const reviewsP = rvCode && ["sector", "district", "ward", "lad"].includes(rvLevel)
+    ? getAreaReviews(rvLevel, rvCode, head.level === "postcode_unit" || PLATE_LEVELS.has(head.level) ? rvCode : head.name) : Promise.resolve(null);
+  const insights = await getAreaInsights(lv.level, slug, {
+    dataId: ctx.dataArea.id, dataLevel: ctx.dataArea.level,
+    scopeId: scope?.id ?? null, scopeName: scope ? (PLATE_LEVELS.has(head.level) ? scope.code : scope.name) : null,
+  });
   const title = isPlate ? head.code : head.name;
 
   // Score panel inputs: category scores + ready-made strength/weakness lines.
@@ -110,7 +127,7 @@ async function Report({ params }: { params: Props["params"] }) {
   const whereKey = head.level as keyof typeof t.report.where;
   const where = t.report.where[whereKey]
     ? tpl(t.report.where[whereKey], {
-        place: head.level === "lad" || head.level === "town" ? (ctx.region?.name ?? ctx.nation?.name ?? "") : head.level === "region" ? (ctx.nation?.name ?? "England") : `${place}${ctx.lad && ctx.lad.name !== place ? `, ${ctx.lad.name}` : ""}`,
+        place: head.level === "lad" || head.level === "town" ? (ctx.region?.name ?? ctx.nation?.name ?? "") : head.level === "ward" ? (ctx.lad?.name ?? "") : head.level === "region" ? (ctx.nation?.name ?? "England") : `${place}${ctx.lad && ctx.lad.name !== place ? `, ${ctx.lad.name}` : ""}`,
         type: String((head.attrs as Record<string, unknown>).local_type ?? t.levels.town),
       })
     : "";
@@ -193,6 +210,9 @@ async function Report({ params }: { params: Props["params"] }) {
           }}
         />
       )}
+
+      <DataSays h={h} insights={insights} oac={await oacP} point={await pointP} />
+      <LocalsSay reviews={await reviewsP} postcode={head.level === "postcode_unit" ? head.code : null} />
 
       <Ad kind="leader" label="728×90 / 320×100" />
 

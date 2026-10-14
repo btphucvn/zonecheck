@@ -19,7 +19,7 @@ TYPES = {"D": "detached", "S": "semi", "T": "terraced", "F": "flat"}
 MIN_SAMPLE = 5
 POSTCODE_LEVELS = {"lsoa": "p.lsoa21_code", "msoa": "p.msoa21_code", "lad": "p.lad_code", "region": "p.region_code",
                    "nation": "p.country_code", "sector": "p.sector", "district": "p.district",
-                   "postal_area": "p.postal_area"}
+                   "postal_area": "p.postal_area", "ward": "p.ward_code"}
 
 
 class Housing(Step):

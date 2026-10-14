@@ -1,5 +1,21 @@
 import type { CSSProperties, ReactNode } from "react";
+import { decileOf, rampOf } from "./crimeModel";
 import type { Fmt } from "./Shell";
+
+/** "7/10" badge from a national percentile (higher percentile = more of the thing), coloured on the crime ramp
+ *  when `bad` says more is worse, otherwise on a neutral blue scale. */
+export function Score({ p, label, sub, bad }: { p: number | null | undefined; label: string; sub?: ReactNode; bad?: boolean }) {
+  if (p == null) return null;
+  const d = decileOf(p);
+  const bg = bad ? rampOf(p)![1] : `hsl(214 45% ${92 - d * 5.5}%)`;
+  const light = bad ? p >= 95 || p < 20 : d >= 7;
+  return (
+    <div className="tp-score">
+      <b className="tp-rk" style={{ background: bg, color: light ? "#fff" : undefined }} aria-label={`${label}: ${d} out of 10`}>{d}/10</b>
+      <span><strong>{label}</strong>{sub && <small>{sub}</small>}</span>
+    </div>
+  );
+}
 
 // Building blocks shared by the topic pages, drawn in the street-plate style.
 

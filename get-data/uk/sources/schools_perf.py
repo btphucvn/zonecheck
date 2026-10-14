@@ -52,3 +52,57 @@ class DfePerformance(Source):
         rel.download(f"{BASE}/download-data?download=true&regions=KS2,KS4,KS5&filters=meta&fileformat=csv&year={y}&meta=true",
                      f"dfe-meta-{y}.zip", headers=BROWSER_HEADERS)
         rel.meta["downloaded"] = got
+
+
+class DfeSchoolProfile(Source):
+    """Hồ sơ trường từ cùng trang DfE: học sinh (census), vắng học, nơi học sinh đi tiếp, số bài thi theo môn.
+
+    Mỗi loại dữ liệu lấy năm học mới nhất có file (destinations thường trễ hơn kết quả thi một năm).
+    """
+    name = "dfe_school_profile"
+    dataset_id = "uk.dfe.school_profile"
+    description = "DfE theo trường: học sinh (giới, SEN, EAL, FSM), vắng học, destinations KS4/16-18/HE, số bài thi KS4 theo môn"
+    # filter DfE → tiền tố file; bắt đầu file phải khớp (CSV) hoặc là zip
+    FILTERS = {
+        "CENSUS": ("census", "URN,"),
+        "PUPILABSENCE": ("absence", "LA,"),
+        "KS4DESTINATION": ("ks4dest", "RECTYPE,"),
+        "KS5DESTINATION": ("ks5dest", "RECTYPE,"),
+        "KS5DESTINATIONHE": ("ks5desthe", "RECTYPE,"),
+        "KS4UNDERLYING": ("ks4subjects", None),
+    }
+
+    def plan(self, args):
+        html = get_text(f"{BASE}/download-data", headers=BROWSER_HEADERS)
+        years = [y for y in re.findall(r'value="(\d{4}-\d{4})"', html) if y != "2020-2021"]
+        if not years:
+            raise RuntimeError(f"Không đọc được danh sách năm học ở {BASE}/download-data (trang đổi giao diện?)")
+        self._years = years[:3]
+        return self.release(years[0], meta={"years": self._years})
+
+    def download(self, rel, args):
+        from common.http import HttpError
+        got = {}
+        for flt, (prefix, head_re) in self.FILTERS.items():
+            for y in self._years:
+                url = f"{BASE}/download-data?download=true&regions=0&filters={flt}&fileformat=csv&year={y}&meta=false"
+                ext = "zip" if head_re is None else "csv"
+                try:
+                    path = rel.download(url, f"dfe-{prefix}-{y}.{ext}", headers=BROWSER_HEADERS)
+                except HttpError as e:
+                    if e.response is not None and e.response.status_code in (400, 404):
+                        log.info("  DfE chưa có %s năm %s (%s) → thử năm trước", flt, y, e.response.status_code)
+                        continue
+                    raise
+                head = path.open("rb").read(64)
+                ok = head.startswith(b"PK") if head_re is None else head.decode("utf-8-sig", "replace").startswith(head_re)
+                if not ok:
+                    path.unlink()
+                    rel.files[:] = [f for f in rel.files if f["path"] != path.name]
+                    log.info("  %s năm %s không phải dữ liệu (bắt đầu %r) → thử năm trước", flt, y, head[:30])
+                    continue
+                got[flt] = y
+                break
+            else:
+                raise RuntimeError(f"DfE: không tải được {flt} cho các năm {self._years}")
+        rel.meta["downloaded"] = got

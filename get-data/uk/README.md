@@ -72,6 +72,20 @@ Lần đầu chạy ở máy local (`get-data/.venv` + tunnel DB), cập nhật 
 Đọc ODS lớn: `common/ods.py` (streaming, ~34 MB RAM cho file 1 GB). Xuất ArcGIS: phân trang keyset theo OBJECTID,
 kiểm tra số feature từng khúc, chờ 65 s khi gặp hạn mức 429.
 
+### Nguồn bổ sung (đợt 4, khảo sát CrystalRoof — COMPETITOR_CRYSTALROOF.md)
+
+| Tool | dataset_id | Ghi chú |
+|---|---|---|
+| `dfe_school_profile` | uk.dfe.school_profile | Compare School Performance: CENSUS (SEN), PUPILABSENCE, KS4/KS5 destinations, KS5 HE, KS4UNDERLYING (bài thi theo môn); mỗi loại lấy năm mới nhất có file |
+| `dfe_spc` | uk.dfe.spc | EES "Schools, pupils and their characteristics": zip release (~240 MB), chỉ đọc 2 file cấp trường |
+| `boundaries_ward` | uk.ons.boundaries_ward | Ward BGC mới nhất (05/2026 khớp mã ONSPD 100%), chỉ E&W |
+| `geods_oac` | uk.geods.oac2021 | OAC 2021/22: `UK_OAC_Final.parquet` (GitHub GeoDS) + tên/mô tả từ API apps.geods.ac.uk (cần DB để chọn postcode đại diện). Cần `pyarrow` |
+| `os_open_roads` | uk.os.open_roads | OS Open Roads GeoPackage |
+| `laei` | uk.gla.laei | LAEI 2022 nồng độ ASCII 20 m (NO2, NOx, PM10, PM2.5, ngày PM10 > 50) |
+| `census2021_more` | uk.ons.census2021 | 18 bảng Census bổ sung (xem `Census2021More.DEFAULT`) |
+| `london_planning` | uk.gla.planning_datahub | London Planning Datahub (Elasticsearch khách), 3 năm |
+| `police_history` | uk.police.history | 5 archive police 2013-11…2023-08 (~8 GB) → LSOA 2021 × năm × loại + độ phủ LAD × tháng. Chạy trên VPS (`ZC_WORKERS=1`): mạng local quá chậm |
+
 ## Loader (nạp DB) — `uk/loaders/`
 
 | Nguồn | Bảng đích |
@@ -98,6 +112,17 @@ kiểm tra số feature từng khúc, chờ 65 s khi gặp hạn mức 429.
 | `nrw_rofsw` | `uk.zone.sw_*_share` cho LSOA Wales |
 | `planning_data_extra` | 16 lớp `core.zone` (thêm `heritage.at_risk`, `heritage.listed_outline`, `heritage.locally_listed`, `planning.open_space`, `planning.local_plan_area`) + brownfield → `core.poi` `planning.brownfield_site` + `mkt_uk.local_plan` |
 | `parliament_mps` | `mkt_uk.mp` + `gss_code` (ghép tên đã chuẩn hoá với `admin.westminster_const`, 632/632) |
+| `dfe_performance` | thêm `uk.ks4.ebacc_entry_pct`, `uk.ks5.best3_*`, `uk.ks5.aab_pct`; dòng TB LA/England → `mkt_uk.school_benchmark` |
+| `dfe_school_profile`, `dfe_spc` | `uk.pupils.*`, `uk.dest.*`, `uk.ks4.subject_entries`, `uk.school.class_size_*` (poi) + `mkt_uk.school_benchmark` |
+| `boundaries_ward` | `core.geo_area` level `ward` (slug "tên-ward-tên-lad") + liên kết ward → lad |
+| `geods_oac` | `mkt_uk.oac`, `mkt_uk.oac_label` |
+| `os_open_roads` | `mkt_uk.road` (Motorway/A/B) |
+| `laei` | `mkt_uk.postcode_air` |
+| `london_ptal` | thêm `mkt_uk.ptal_grid` (lưới 100 m) |
+| `orr_station_usage` | thêm attrs `operator` (station facility owner), `main_destination` |
+| `osm_uk` | thêm `emergency.ambulance_station`, `health.hospital` (attrs `emergency`) |
+| `london_planning` | `mkt_uk.planning_application` |
+| `police_history` | `mkt_uk.crime_lsoa_year` + `mkt_uk.crime_lsoa_year_cover` |
 
 Ngưng dùng (`RETIRED` trong `uk/__main__.py`: `cleanup` đặt release `superseded` rồi xoá file thô, `uk all` bỏ qua):
 `os_codepoint_open` (trùng ONSPD), `journey_time` (JTS 2019 theo LSOA 2011, đã thay bằng DfT connectivity 2025).
@@ -119,12 +144,18 @@ Ghi chú dữ liệu:
 | `epc_match` | Ghép Price Paid ↔ EPC theo địa chỉ trong cùng postcode → `mkt_uk.ppd_epc_match`; `uk.price.per_sqm` (£/m²) và `uk.price.floor_area` trung vị 24 tháng |
 | `access` | `uk.access.*`, `uk.schools.*`: khoảng cách tới GP/trường/ga/siêu thị/công viên, tiện ích quanh nhà, chất lượng trường gần nhất (theo postcode, trung bình theo dân số) |
 | `exposure` | `uk.zone.*_share` + `core.area_zone_exposure`: % dân trong Flood Zone, conservation, green belt, AONB... |
-| `rollup` | Đưa chỉ số LSOA/MSOA lên mọi cấp trang (trung bình theo dân số / tổng theo phần) |
+| `rollup` | Đưa chỉ số LSOA/MSOA lên mọi cấp trang (trung bình theo dân số / tổng theo phần), kể cả ward |
+| `census_shares` | 54 chỉ số % `uk.share.*` từ phân phối Census (NS-SeC 5 lớp, học vấn, tenure, tuổi 20 năm, loại hộ, dân tộc, tôn giáo) ở mọi cấp ≥ LSOA; kiểm tra tổng nhóm ≈ 100% và số ONS công bố |
 | `scoring` | Phân vị theo cấp + phạm vi so sánh; `area_category_score` (8 nhóm), `area_overall_score` (6 vai trò), mô hình `uk.v1` |
 | `streets` | `mkt_uk.postcode_street`: tên đường + post town cho mỗi postcode (cặp nhiều giao dịch nhất trong Price Paid) cho gợi ý tìm kiếm |
 
 Mỗi bước có kiểm tra chéo với số liệu công bố (dân số Census, tỉ lệ tội phạm, giá trung vị, khoảng cách trung bình,
 kiểm tra định hướng như Westminster kém an toàn hơn Rutland). Fail → rollback.
+
+## Review cư dân
+
+Web ghi review vào `mkt_uk.review` bằng role `zonecheck_review` (chỉ INSERT). Duyệt: `python -m uk.manual.reviews`
+(liệt kê), `… approve <id>`, `… reject <id>`.
 
 ## Tải tay
 

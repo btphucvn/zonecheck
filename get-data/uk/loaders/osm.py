@@ -26,6 +26,8 @@ OSM_POI = {
     ("amenity", "post_office"): ("service.post_office", "Post office"),
     ("amenity", "police"): ("emergency.police", "Police station"),
     ("amenity", "fire_station"): ("emergency.fire_station", "Fire station"),
+    ("emergency", "ambulance_station"): ("emergency.ambulance_station", "Ambulance station"),
+    ("amenity", "hospital"): ("health.hospital", "Hospital"),
 }
 POI_TYPES = {
     "leisure": "Leisure", "culture": "Culture", "nightlife": "Nightlife", "service": "Services", "emergency": "Emergency services",
@@ -33,10 +35,12 @@ POI_TYPES = {
     "culture.library": "Library", "culture.cinema": "Cinema", "culture.theatre": "Theatre",
     "nightlife.nightclub": "Nightclub", "transport.ev_charging": "EV charging point", "service.post_office": "Post office",
     "emergency.police": "Police station", "emergency.fire_station": "Fire station",
+    "emergency.ambulance_station": "Ambulance station", "health.hospital": "Hospital",
 }
 # khoảng hợp lý số POI mỗi loại ở UK (OSM 2026)
 EXPECT = {"leisure.gym": (4000, 20000), "transport.ev_charging": (4000, 80000), "culture.library": (2500, 6000),
-          "service.post_office": (6000, 13000), "emergency.fire_station": (1000, 2500)}
+          "service.post_office": (6000, 13000), "emergency.fire_station": (1000, 2500),
+          "emergency.ambulance_station": (300, 2500), "health.hospital": (1200, 6000)}
 
 POWER_DDL = """
 CREATE TABLE IF NOT EXISTS mkt_uk.power_line (
@@ -55,7 +59,7 @@ def tag(col: str, key: str) -> str:
 class OsmLoader(Loader):
     source = "osm_uk"
     depends_on = ("onspd",)
-    description = "OSM UK → core.poi (gym, bể bơi, thư viện, rạp, trạm sạc EV, bưu điện, cảnh sát, cứu hoả) + mkt_uk.power_line"
+    description = "OSM UK → core.poi (gym, bể bơi, thư viện, rạp, trạm sạc EV, bưu điện, cảnh sát, cứu hoả, cứu thương, bệnh viện/A&E) + mkt_uk.power_line"
 
     def load(self, ctx: LoadContext) -> dict:
         pbf = str(ctx.file(r"\.osm\.pbf$"))
@@ -66,12 +70,15 @@ class OsmLoader(Loader):
             "-nlt", "MULTIPOLYGON", "-sql",
             f"SELECT osm_id, osm_way_id, name, leisure, amenity, other_tags FROM multipolygons "
             f"WHERE leisure IN ('fitness_centre','sports_centre','swimming_pool') OR amenity IN "
-            f"({', '.join(repr(v) for k, v in OSM_POI if k == 'amenity')})"])
+            f"({', '.join(repr(v) for k, v in OSM_POI if k == 'amenity')}) OR "
+            f"other_tags LIKE '%\"emergency\"=>\"ambulance_station\"%'"])
         ctx.ogr_load(pbf, "osm_power", extra=[
             "-nlt", "MULTILINESTRING", "-sql", "SELECT osm_id, other_tags FROM lines WHERE other_tags LIKE '%\"power\"=>\"line\"%'"])
 
         case_pt = "CASE " + " ".join(f"WHEN other_tags LIKE '%\"{k}\"=>\"{v}\"%' THEN '{t}'" for (k, v), (t, _) in OSM_POI.items()) + " END"
-        case_poly = "CASE " + " ".join(f"WHEN {k} = '{v}' THEN '{t}'" for (k, v), (t, _) in OSM_POI.items()) + " END"
+        case_poly = "CASE " + " ".join(
+            f"WHEN {k} = '{v}' THEN '{t}'" if k in ("leisure", "amenity") else f"WHEN other_tags LIKE '%\"{k}\"=>\"{v}\"%' THEN '{t}'"
+            for (k, v), (t, _) in OSM_POI.items()) + " END"
         # bể bơi riêng (nhà dân) không phải tiện ích công cộng: chỉ giữ khi access không phải private
         priv = f"coalesce({tag('other_tags', 'access')}, '') IN ('private', 'no', 'customers')"
         ctx.sql("POI OSM gộp (điểm + tâm vùng)", f"""
@@ -79,13 +86,13 @@ class OsmLoader(Loader):
             SELECT 'n' || osm_id AS ext, name, {case_pt} AS type_code, ST_GeometryN(geom, 1) AS geom,
                    {tag('other_tags', 'operator')} AS operator, {tag('other_tags', 'brand')} AS brand,
                    {tag('other_tags', 'opening_hours')} AS opening_hours, {tag('other_tags', 'website')} AS website,
-                   {tag('other_tags', 'capacity')} AS capacity, {priv} AS is_private
+                   {tag('other_tags', 'capacity')} AS capacity, {tag('other_tags', 'emergency')} AS emergency, {priv} AS is_private
             FROM {STAGE}.osm_pt
             UNION ALL
             SELECT CASE WHEN osm_way_id IS NOT NULL THEN 'w' || osm_way_id ELSE 'r' || osm_id END, name, {case_poly},
                    ST_PointOnSurface(geom), {tag('other_tags', 'operator')}, {tag('other_tags', 'brand')},
                    {tag('other_tags', 'opening_hours')}, {tag('other_tags', 'website')}, {tag('other_tags', 'capacity')},
-                   {priv}
+                   {tag('other_tags', 'emergency')}, {priv}
             FROM {STAGE}.osm_poly""")
         ctx.sql("bỏ POI riêng tư / không xác định loại", "DELETE FROM osm_poi WHERE type_code IS NULL OR is_private OR geom IS NULL")
         # bể bơi trong vườn nhà thường không có tên và không ghi access → chỉ giữ bể có tên (bể công cộng, trung tâm thể thao)
@@ -106,7 +113,8 @@ class OsmLoader(Loader):
                                   dataset_id, release_id)
             SELECT DISTINCT ON (ext) 'uk', type_code, 'osm', ext, coalesce(nullif(name, ''), nullif(brand, ''), %s::jsonb ->> type_code),
                    geom, 'open', jsonb_strip_nulls(jsonb_build_object('operator', operator, 'brand', brand,
-                   'opening_hours', opening_hours, 'website', website, 'capacity', capacity)), 'uk.osm.geofabrik', %s
+                   'opening_hours', opening_hours, 'website', website, 'capacity', capacity,
+                   'emergency', CASE WHEN type_code = 'health.hospital' THEN emergency END)), 'uk.osm.geofabrik', %s
             FROM osm_poi ORDER BY ext
             ON CONFLICT (market_code, external_scheme, external_id) DO UPDATE SET type_code = EXCLUDED.type_code,
                 name = EXCLUDED.name, geom = EXCLUDED.geom, status = 'open', attrs = EXCLUDED.attrs,

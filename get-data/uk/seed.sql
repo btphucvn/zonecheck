@@ -129,6 +129,7 @@ INSERT INTO core.geo_level (market_code, code, name, rank, kind, is_searchable, 
     ('uk', 'lsoa',          'LSOA',                1, 'statistical',    false, false, NULL,       '2021'),
     ('uk', 'msoa',          'MSOA',                2, 'statistical',    false, false, NULL,       '2021'),
     ('uk', 'town',          'Town / city',         3, 'settlement',     true,  true,  'town',     NULL),
+    ('uk', 'ward',          'Ward',                3, 'administrative', true,  true,  'ward',     NULL),
     ('uk', 'lad',           'Local authority',     4, 'administrative', true,  true,  'area',     NULL),
     ('uk', 'region',        'Region',              5, 'administrative', true,  true,  'region',   NULL),
     ('uk', 'nation',        'Nation',              6, 'administrative', false, false, NULL,       NULL)
@@ -401,5 +402,18 @@ INSERT INTO core.poi_type (code, parent_code, name_i18n, is_searchable, has_page
     ('planning', NULL, '{"en":"Planning"}', false, false, NULL),
     ('planning.brownfield_site', 'planning', '{"en":"Brownfield land register site"}', false, false, NULL)
 ON CONFLICT (code) DO NOTHING;
+
+-- Khảo sát CrystalRoof 2026-10-14: hồ sơ trường (COMPETITOR_CRYSTALROOF.md, mục 3 nhóm A)
+INSERT INTO ops.dataset (id, source_id, name, update_frequency, native_level, coverage, loader_module) VALUES
+    ('uk.dfe.school_profile', 'uk.dfe', 'School profile: SEN, absence, destinations, KS4 subject entries', 'annual', NULL, 'England', 'get-data/uk/sources/schools_perf.py:DfeSchoolProfile'),
+    ('uk.dfe.spc',            'uk.dfe', 'Schools, pupils and their characteristics (school level)',      'annual', NULL, 'England', 'get-data/uk/sources/extra.py:EesReleaseFiles'),
+    ('uk.police.history',     'uk.police', 'Police street crime history (LSOA × year × type)',             'irregular', 'lsoa', 'E&W', 'get-data/uk/sources/police_history.py:PoliceHistory'),
+    ('uk.gla.planning_datahub', 'uk.gla', 'London Planning Datahub (planning applications)',              'daily', NULL, 'London', 'get-data/uk/sources/planning_apps.py:LondonPlanning'),
+    ('uk.gla.laei',           'uk.gla', 'London Atmospheric Emissions Inventory 2022 (concentrations)',     'irregular', NULL, 'London', 'get-data/uk/sources/extra.py:UrlFiles'),
+    ('uk.os.open_roads',      'uk.os',  'OS Open Roads',                                                    'semiannual', NULL, 'GB', 'get-data/uk/sources/geography.py:OsOpenData'),
+    ('uk.geods.oac2021',      'uk.ons', 'UK Output Area Classification 2021/22 (GeoDS)',                   'irregular', 'oa', 'UK', 'get-data/uk/sources/classification.py:GeodsOac'),
+    ('uk.ons.boundaries_ward', 'uk.ons', 'Ward boundaries (BGC)',                                        'annual', 'ward', 'UK', 'get-data/uk/sources/geography.py:OnsBoundary')
+ON CONFLICT (id) DO UPDATE SET source_id = EXCLUDED.source_id, name = EXCLUDED.name, update_frequency = EXCLUDED.update_frequency,
+    native_level = EXCLUDED.native_level, coverage = EXCLUDED.coverage, loader_module = EXCLUDED.loader_module;
 
 COMMIT;

@@ -19,7 +19,7 @@ MEAN_PATTERNS = ["uk.iod25.%_score", "uk.wimd25.%_score", "uk.tcm.%", "uk.pcm.%"
                  "uk.schools.%", "uk.zone.%", "uk.bb.%", "uk.noise.%", "uk.climate.%", "uk.road.%", "uk.london.%",
                  "uk.benefit.%", "uk.own.%"]
 SUM_PATTERNS = ["uk.census21.%", "uk.ctax.stock", "uk.pop.%"]
-TARGETS = ["msoa", "lad", "region", "nation", "sector", "district", "postal_area", "town"]
+TARGETS = ["msoa", "lad", "region", "nation", "sector", "district", "postal_area", "town", "ward"]
 MIN_COVERAGE = 0.5
 
 
@@ -84,7 +84,7 @@ class Rollup(Step):
             ON CONFLICT (market_code, area_id, metric_id, period) DO UPDATE SET value_num = EXCLUDED.value_num,
                 sample_size = EXCLUDED.sample_size, computed_at = now()
             WHERE core.metric_value.release_id IS NULL""", (mean_ids,))
-        postal = "('sector', 'district', 'postal_area', 'town')"
+        postal = "('sector', 'district', 'postal_area', 'town', 'ward')"
         ctx.sql("tổng phân bố (value_json) theo nhóm", f"""
             CREATE TEMP TABLE sum_json ON COMMIT DROP AS
             SELECT area_id, metric_id, period, jsonb_object_agg(k, round(t)) AS j

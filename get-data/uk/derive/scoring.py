@@ -18,7 +18,7 @@ from .base import Step
 log = logging.getLogger(__name__)
 
 MODEL = "uk.v1"
-LEVELS = ["lsoa", "msoa", "sector", "district", "postal_area", "town", "lad", "region"]
+LEVELS = ["lsoa", "msoa", "sector", "district", "postal_area", "town", "ward", "lad", "region"]
 CATEGORIES = {
     "affordability": ("Affordability", {"uk.price.median": 2, "uk.ctax.band_d": 0.5}),
     "safety": ("Safety", {"uk.crime.total_rate": 2, "uk.crime.violent_rate": 1, "uk.crime.burglary_rate": 1,
@@ -176,7 +176,7 @@ class Percentiles(Step):
             SELECT parent_id, nat FROM (
                 SELECT DISTINCT ON (k.parent_id) k.parent_id, left(c.code, 1) AS nat
                 FROM core.geo_area_link k JOIN core.geo_area c ON c.id = k.child_id AND c.level_code = 'lsoa'
-                JOIN core.geo_area p ON p.id = k.parent_id AND p.level_code IN ('sector','district','postal_area','town')
+                JOIN core.geo_area p ON p.id = k.parent_id AND p.level_code IN ('sector','district','postal_area','town','ward')
                 WHERE k.relation = 'overlaps'
                 GROUP BY k.parent_id, left(c.code, 1)
                 ORDER BY k.parent_id, sum(k.weight * c.population) DESC) x""")

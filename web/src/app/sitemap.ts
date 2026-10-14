@@ -8,7 +8,7 @@ import { RANKINGS } from "@/server/rankings";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export async function generateSitemaps() {
-  return [0, 1, 2, 3, 4, 5].map((id) => ({ id }));
+  return [0, 1, 2, 3, 4, 5, 6].map((id) => ({ id }));
 }
 
 async function rows(id: number): Promise<{ path: string }[]> {
@@ -33,6 +33,7 @@ async function query(id: number): Promise<Record<string, unknown>[]> {
     case 2: return [...(await area("sector", "sector"))];
     case 3: return [...(await area("town", "town", sql`and coalesce(population, 0) >= 500`))];
     case 4: return [...(await sql`select '/uk/school/' || slug as path from core.poi where market_code = 'uk' and type_code like 'school.%' and slug is not null and status = 'open' order by slug limit 50000`)];
+    case 6: return [...(await area("ward", "ward"))];
     case 5: return [...(await sql`select '/uk/station/' || slug as path from core.poi where market_code = 'uk' and type_code in ('station.rail', 'station.metro') and slug is not null and status = 'open' order by slug`)];
     default: return [];
   }

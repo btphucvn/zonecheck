@@ -34,7 +34,13 @@ def last_modified(url: str, headers: dict | None = None) -> date:
         if r.status_code >= 400:
             raise RuntimeError(f"GET {url} → HTTP {r.status_code}")
         lm = r.headers.get("Last-Modified")
-    return parsedate_to_datetime(lm).date() if lm else date.today()
+    if not lm:
+        return date.today()
+    try:
+        return parsedate_to_datetime(lm).date()
+    except (TypeError, ValueError):  # vài server (London Datastore) trả ISO 8601: 2025-12-17T12:34:32.000Z
+        from datetime import datetime
+        return datetime.fromisoformat(lm.strip().replace("Z", "+00:00")).date()
 
 
 # ------------------------------------------------------------------- y tế -----
@@ -255,6 +261,21 @@ class Census2021Extra(Census2021):
         return rel
 
 
+class Census2021More(Census2021):
+    """Bảng bổ sung đợt 3 (khảo sát CrystalRoof): các bảng mà API CrystalRoof có. Bỏ bảng chi tiết hàng trăm nhóm
+    ở cấp OA (dân tộc/ngôn ngữ/tôn giáo/nơi sinh chi tiết) và bảng xu hướng tính dục, bản dạng giới."""
+    name = "census2021_more"
+    description = "Census 2021 bảng bổ sung đợt 3: hôn nhân, hộ chiếu, giới, sống chung, di cư, ngôn ngữ hộ, bản sắc, phòng, mật độ ở, giờ làm, ngành"
+    DEFAULT = ["ts002", "ts005", "ts008", "ts010", "ts015", "ts019", "ts025", "ts026", "ts027", "ts032", "ts040",
+               "ts051", "ts052", "ts053", "ts059", "ts060", "ts065", "ts068"]
+
+    def plan(self, args):
+        rel = super().plan(args)
+        if rel.version == "2021":
+            rel = self.release("2021-more", meta=rel.meta)
+        return rel
+
+
 EXTRA_SOURCES = [
     Cqc(),
     GovukLatestStats("ofsted_childcare", "uk.ofsted.childcare",
@@ -274,6 +295,9 @@ EXTRA_SOURCES = [
         "public-transport-accessibility-levels1": r"(Grid%20Values\.zip|LSOA2011%20AvPTAI2015\.csv|COA2011%20AvPTAI2015\.csv)$",
     }, "London Datastore: PTAL 2015 (lưới 100 m + trung bình theo OA/LSOA 2011)", min_files=3),
     TflStations(),
+    UrlFiles("laei", "uk.gla.laei", [
+        "https://data.london.gov.uk/download/2lg5g/d44/LAEI2022-Concentrations-Data-ASCII.zip",
+    ], "London Atmospheric Emissions Inventory 2022: nồng độ NO2, PM10, PM2.5, số ngày PM10 vượt ngưỡng, lưới 20 m (London)"),
     ArcgisZones("haduk_grid", "uk.metoffice.haduk_grid", {
         f"{svc.lower()}.geojson": f"{MO}/{svc}/FeatureServer/{lid}"
         for svc, lid in [("Annual_Temperature_Observations_1991_2020", 2), ("Annual_Max_Temperature_Observations_1991_2020", 9),
@@ -299,7 +323,10 @@ EXTRA_SOURCES = [
                "/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/lowersuperoutputareamidyearpopulationestimates",
                "ONS dân số giữa năm theo LSOA 2021 × tuổi × giới (E&W)"),
     Census2021Extra(),
+    Census2021More(),
     EesReleaseFiles("dfe_school_offers", "uk.dfe.school_offers", "applications and offers",
                     r"^Secondary and primary schools? applications and offers \d{4}$",
                     "DfE applications & offers: số đơn, tỷ lệ nguyện vọng 1 (LA + file cấp trường nếu có), England"),
+    EesReleaseFiles("dfe_spc", "uk.dfe.spc", "class sizes", r"^Class sizes - state-funded primary and secondary schools$",
+                    "DfE Schools, pupils and their characteristics: file cấp trường (dân tộc HS, ngôn ngữ, sĩ số theo khối, sĩ số lớp)"),
 ]

@@ -49,6 +49,7 @@ class OrrStationUsageLoader(Loader):
         col = lambda key: next(i for i, c in enumerate(hdr) if key.lower() in c.lower())  # noqa: E731
         i_all, i_int, i_tlc, i_reg, i_rank, i_nlc = (col("All tickets"), col("Interchanges"), col("Three Letter Code"),
                                                      col("Region"), col("Rank"), col("National Location Code"))
+        i_sfo, i_main = col("Station facility owner"), col("Main origin or destination station")
         orr = [r for r in rows[h + 1:] if r and r[0].strip()]
         crs = [r[i_tlc].strip() for r in orr]
         dup = {c for c in crs if crs.count(c) > 1}
@@ -123,17 +124,22 @@ class OrrStationUsageLoader(Loader):
                             period_type="financial_year", scope="uk.uk", name=name, scorable=False)
         ctx.conn.execute("UPDATE core.metric SET subject='poi' WHERE id LIKE 'uk.rail.%'")
 
-        t = ctx.stage_table("orr", ["poi_id", "crs", "nlc", "orr_name", "region", "entries_exits", "interchanges",
-                                    "rank"], {"poi_id": "bigint", "entries_exits": "bigint", "interchanges": "bigint",
-                                              "rank": "int"})
-        ctx.copy_rows(t, ["poi_id", "crs", "nlc", "orr_name", "region", "entries_exits", "interchanges", "rank"],
+        cols = ["poi_id", "crs", "nlc", "orr_name", "region", "entries_exits", "interchanges", "rank", "operator", "main_dest"]
+        t = ctx.stage_table("orr", cols, {"poi_id": "bigint", "entries_exits": "bigint", "interchanges": "bigint", "rank": "int"})
+        clean = lambda v: None if v.strip() in ("", "[z]", "[x]", "[c]") else v.strip()  # noqa: E731
+        ctx.copy_rows(t, cols,
                       [(pid, r[i_tlc].strip(), r[i_nlc].strip(), r[0].strip(), r[i_reg].strip(), num(r[i_all]),
-                        num(r[i_int]), num(r[i_rank])) for pid, r in matches], "COPY ORR")
+                        num(r[i_int]), num(r[i_rank]), clean(r[i_sfo]), clean(r[i_main])) for pid, r in matches], "COPY ORR")
+        ops = ctx.scalar(f"SELECT count(DISTINCT operator) FROM {t}")
+        log.info("    %s hãng quản lý ga (station facility owner)", ops)
+        if not 10 <= (ops or 0) <= 40:
+            raise LoadError(f"Số hãng quản lý ga bất thường: {ops}")
         ctx.check_range("entries_exits", t, "entries_exits", 0, 300_000_000)
         ctx.sql("POI ga: crs + slug + attrs", f"""
             UPDATE core.poi p SET slug = lower(s.crs) || '-' || {slug_sql('s.orr_name')},
                    attrs = p.attrs || jsonb_strip_nulls(jsonb_build_object('crs', s.crs, 'nlc', s.nlc,
-                       'orr_name', s.orr_name, 'orr_region', s.region, 'usage_rank', s.rank))
+                       'orr_name', s.orr_name, 'orr_region', s.region, 'usage_rank', s.rank, 'operator', s.operator,
+                       'main_destination', s.main_dest))
             FROM {t} s WHERE p.id = s.poi_id""")
         # ga không có trong ORR (ga đóng/di sản) không có trang riêng
         ctx.sql("bỏ slug ga không có trong ORR", f"""
